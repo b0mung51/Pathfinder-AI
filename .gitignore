@@ -1,0 +1,44 @@
+.env
+.env.*
+
+# Python
+__pycache__/
+*.py[cod]
+*.pyc
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
+*.sqlite3
+
+# Django
+media/
+staticfiles/
+
+# Virtual environments
+.venv/
+venv/
+env/
+
+# Node
+node_modules/
+frontend/node_modules/
+npm-debug.log*
+pnpm-lock.yaml
+*.tsbuildinfo
+dist/
+build/
+
+# Vite
+frontend/dist/
+
+# OS / editor cruft
+.DS_Store
+Thumbs.db
+.idea/
+.vscode/
+
+# Coverage / reports
+coverage/
+.coverage
+.coverage.*
+*.lcov

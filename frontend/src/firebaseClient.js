@@ -1,0 +1,1 @@
+// Firebase client helper placeholder. Wire up when credentials are available.\nexport function initFirebase() {\n  console.warn('Firebase not configured. Provide VITE_FIREBASE_* env vars and implementation.');\n}
