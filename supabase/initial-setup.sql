@@ -67,11 +67,16 @@ for each row execute function public.create_profile_for_user();
 -- ---------------------------------------------------------------------------
 create table if not exists public.user_preferences (
   user_id uuid primary key references auth.users on delete cascade,
-  preferred_location text,
-  budget_range text,
   created_at timestamptz default timezone('utc'::text, now()),
   updated_at timestamptz default timezone('utc'::text, now())
 );
+
+alter table public.user_preferences add column if not exists gpa numeric;
+alter table public.user_preferences add column if not exists sat_score integer;
+alter table public.user_preferences add column if not exists intended_major text;
+alter table public.user_preferences add column if not exists budget integer;
+alter table public.user_preferences add column if not exists preference_tags text[];
+alter table public.user_preferences add column if not exists responses jsonb;
 
 alter table public.user_preferences enable row level security;
 
