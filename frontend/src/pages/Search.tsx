@@ -105,19 +105,23 @@ export default function Search() {
   const [error, setError] = useState<string|null>(null);
   // loading needed to notify if results should be fetched
   const [loading, setLoading] = useState(false);
-  // Flag to process only current request
-  let isActive = true;
-
+  
   const handleSelect = (id: string) => {
     setSelectedColleges((prev) =>
       prev.includes(id) ? prev.filter((cid) => cid !== id) : [...prev, id]
-    );
-  };
+  );
+};
 
-  useEffect(() => {
+useEffect(() => {
+    // Flag to process only current request
+    let isActive = true;
+    
     const fetchCollege = async () => {
+      // Trim whitespace
+      const query = searchQuery.trim();
+
       // If no user input, return empty results
-      if(!searchQuery.trim()) {
+      if(!query) {
         setColleges(mockColleges)
         setError(null);
         setLoading(null);
@@ -130,18 +134,20 @@ export default function Search() {
       // Fetch fuzzy results using user input
       const {data: collegeData, error: collegeError} = await supabase
         .from("colleges")
-        .select()
-        .textSearch("title", searchQuery.toLowerCase())
+        .select("*")
+        .ilike("name", `%${query}%`);
 
       // Fetch program from college
       const {data: programData, error: programError} = await supabase
         .from("programs")
         .select("*")
-        .ilike("field_of_study", searchQuery.toLowerCase())
+        .in("college_id", collegeData.map(college => college.id));
 
       // If input changed or component unmounted before query finished - ignore result
       if (!isActive) return;
-
+      console.log(`Query: '${query}'`, collegeData[0]);
+      //console.log("Program Data: ", programData);
+      
       if (collegeError || programError) {
         setError("Something went wrong while fetching results");
         setLoading(false);
@@ -150,25 +156,20 @@ export default function Search() {
 
       const combinedResults = collegeData.map((college) => {
         const relatedPrograms = programData.filter(
-          (program) => program.college_id === college.college_id
-        )
+          (program) => program.college_id === college.id
+        );
 
         return {
-          ...collegeData,
-          programs: relatedPrograms,
-          score: Math.floor(Math.random() * 100) + 1, // Random "match" score
+          ...college,
+          programs: relatedPrograms, 
+          score: Math.floor(Math.random() * 100) + 1, // add a random score
         };
       });
-
-      if (combinedResults.length == 0) {
-        setError("No results found.");
-      }
-
+      console.log(combinedResults);
       setColleges(combinedResults);
       setLoading(false);
     }
     fetchCollege()
-
     // When component unmounted early, cancel the request
     return () => {
       isActive = false;
@@ -223,7 +224,7 @@ export default function Search() {
               ) : (
               colleges.map((college) => (
                 <CollegeCard
-                  key={college.college_id}
+                  key={college.id}
                   {...college}
                 />
               )))}
