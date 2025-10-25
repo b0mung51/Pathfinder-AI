@@ -7,7 +7,6 @@ import { Card } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Search as SearchIcon, SlidersHorizontal } from "lucide-react";
 import { supabase } from "@/lib/supabaseClient";
-import { log } from "console";
 
 export const mockColleges = [
   {
@@ -102,6 +101,12 @@ export default function Search() {
   // colleges has all data for colleges 
   const [colleges, setColleges] = useState<any[]>([]);
   const [searchQuery, setSearchQuery] = useState("");
+  // error needed to show no results found message
+  const [error, setError] = useState<string|null>(null);
+  // loading needed to notify if results should be fetched
+  const [loading, setLoading] = useState(false);
+  // Flag to process only current request
+  let isActive = true;
 
   const handleSelect = (id: string) => {
     setSelectedColleges((prev) =>
@@ -114,8 +119,13 @@ export default function Search() {
       // If no user input, return empty results
       if(!searchQuery.trim()) {
         setColleges(mockColleges)
+        setError(null);
+        setLoading(null);
         return
       }
+
+      setError(null);
+      setLoading(null);
 
       // Fetch fuzzy results using user input
       const {data: collegeData, error: collegeError} = await supabase
@@ -129,21 +139,41 @@ export default function Search() {
         .select("*")
         .ilike("field_of_study", searchQuery.toLowerCase())
 
+      // If input changed or component unmounted before query finished - ignore result
+      if (!isActive) return;
+
+      if (collegeError || programError) {
+        setError("Something went wrong while fetching results");
+        setLoading(false);
+        return;
+      }
+
       const combinedResults = collegeData.map((college) => {
         const relatedPrograms = programData.filter(
           (program) => program.college_id === college.college_id
         )
-        
+
         return {
           ...collegeData,
           programs: relatedPrograms,
           score: Math.floor(Math.random() * 100) + 1, // Random "match" score
-        }
-      })
+        };
+      });
 
-      setColleges(combinedResults)
+      if (combinedResults.length == 0) {
+        setError("No results found.");
+      }
+
+      setColleges(combinedResults);
+      setLoading(false);
     }
     fetchCollege()
+
+    // When component unmounted early, cancel the request
+    return () => {
+      isActive = false;
+    }
+
   }, [searchQuery]);
   
   return (
@@ -182,12 +212,21 @@ export default function Search() {
 
             {/* Results */}
             <div className="space-y-4">
-              {colleges.map((college) => (
+              {loading ? (
+                 <p className="text-muted-foreground text-center py-8">Searching...</p>
+              ) : error ? (
+                <p className="text-muted-foreground text-center py-8">{error}</p>
+              ) : colleges.length === 0 ? (
+                <p className="text-muted-foreground text-center py-8">
+                  Try searching for a college name or major.
+                </p>
+              ) : (
+              colleges.map((college) => (
                 <CollegeCard
                   key={college.college_id}
                   {...college}
                 />
-              ))}
+              )))}
             </div>
           </div>
 
