@@ -3,6 +3,9 @@ from supabase import create_client
 import os
 import re
 
+# Load environment variables from backend/.env
+ROOT_DIR = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+load_dotenv(os.path.join(ROOT_DIR, ".env"))
 
 class SupabaseConnector:
     def __init__(self, requiredTables={
@@ -46,61 +49,15 @@ class SupabaseConnector:
         """
         }):
 
-        ROOT_DIR = "../.."
-        load_dotenv(os.path.join(ROOT_DIR, ".env"))
         self.url = os.getenv("SUPABASE_URL")
         self.key = os.getenv("SUPABASE_KEY")
         self.client = create_client(self.url, self.key)
         self.requiredTables = requiredTables
-        self.intialize_tables()
 
     def get_client(self):
         return self.client
     
-    def intialize_tables(self):
-        # runs. If tables not exist, creates them.
-        client = self.get_client()
-        query = lambda name, colstr: f"""CREATE TABLE IF NOT EXISTS ${name} (
-            ${colstr}
-            created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
-        );"""
-        
-        user_columns = self.requiredTables
-        for (name, columns) in user_columns.items():
-            thisQuery = query(name, columns)
-            try:
-                result = client.postgrest.rpc("execute_sql", {"sql": thisQuery})
-                print(result)
-            except Exception as e:
-                print(f"Error creating table {name}: {e}")
-                break
-    def getColumnsFromTable(self, table):
-        """Return a list of column names for the given table key.
-
-        The method expects `self.requiredTables[table]` to be a string containing
-        SQL-style column definitions (one per line). It extracts the first
-        identifier on each non-empty line as the column name.
-
-        Returns an empty list if the table key is not found or no columns are
-        discoverable.
-        """
-        columns_def = self.requiredTables.get(table)
-        if not columns_def:
-            return []
-
-        names = []
-        for line in columns_def.strip().splitlines():
-            line = line.strip()
-            if not line:
-                continue
-            # remove trailing comma if present
-            if line.endswith(','):
-                line = line[:-1].rstrip()
-            # Match an identifier at start (allows letters, numbers, underscore)
-            m = re.match(r'^"?`?([A-Za-z0-9_]+)"?`?\b', line)
-            if m:
-                names.append(m.group(1))
-        return names
+    
     def selectData(self,tableName, columns=["*"]):
         client = self.get_client()
         data = client.table(tableName).select(','.join(columns)).execute()
@@ -113,3 +70,60 @@ class SupabaseConnector:
             query = query.eq(col, val)
         data = query.execute()
         return data.data
+    def numRows(self, tableName, conditions={}):
+        client = self.get_client()
+        query = client.table(tableName).select("id", count="exact")
+        for col, val in conditions.items():
+            query = query.eq(col, val)
+        data = query.execute()
+        return data.count
+    def insertData(self, tableName, data: dict):
+        client = self.get_client()
+        response = client.table(tableName).insert(data).execute()
+        return response.data
+    def batchInsertData(self, tableName, data: list[dict]):
+        client = self.get_client()
+        response = client.table(tableName).insert(data).execute()
+        return response.data
+    def updateData(self, tableName, data: dict, conditions: dict):
+        client = self.get_client()
+        query = client.table(tableName).update(data)
+        for col, val in conditions.items():
+            query = query.eq(col, val)
+        response = query.execute()
+        return response.data
+    def deleteData(self, tableName, conditions: dict):
+        client = self.get_client()
+        query = client.table(tableName).delete()
+        for col, val in conditions.items():
+            query = query.eq(col, val)
+        response = query.execute()
+        return response.data
+    def upsertData(self, tableName, data: dict):
+        client = self.get_client()
+        response = client.table(tableName).upsert(data).execute()
+        return response.data
+
+    # misc functions
+    def checkIfValueExists(self, tableName, columnName, value):
+        client = self.get_client()
+        query = client.table(tableName).select(columnName).eq(columnName, value)
+        data = query.execute()
+        return len(data.data) > 0
+
+    def getColumnValue(self, tableName, columnName, conditions):
+        client = self.get_client()
+        query = client.table(tableName).select(columnName)
+        for col, val in conditions.items():
+            query = query.eq(col, val)
+        data = query.execute()
+        return data.data[0].get(columnName) if data.data else None
+    
+    def getTableColumns(self, tableName):
+        client = self.get_client()
+        query = client.table(tableName).select("*").limit(1)
+        data = query.execute()
+        if data.data:
+            return list(data.data[0].keys())
+        return []
+   
