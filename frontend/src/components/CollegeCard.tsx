@@ -8,8 +8,13 @@ interface CollegeCardProps {
   id: string;
   name: string;
   location: string;
-  size: string;
-  cost: string;
+  ranking: number;
+  url: string;
+  gradRate: number;
+  averageCost: string;
+  acceptanceRate: number;
+  medianSalary: number;
+  size: number;
   major: string;
   matchScore: number;
   selected?: boolean;
@@ -22,8 +27,13 @@ export function CollegeCard({
   id,
   name,
   location,
+  ranking,
+  url,
+  gradRate,
+  averageCost,
+  acceptanceRate,
+  medianSalary,
   size,
-  cost,
   major,
   matchScore,
   selected,
@@ -63,7 +73,7 @@ export function CollegeCard({
             </div>
             <div className="flex items-center gap-2">
               <DollarSign className="h-4 w-4 text-muted-foreground" />
-              <span>{cost}</span>
+              <span>{averageCost}</span>
             </div>
             <div className="flex items-center gap-2">
               <TrendingUp className="h-4 w-4 text-muted-foreground" />
