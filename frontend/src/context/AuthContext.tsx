@@ -82,6 +82,9 @@ export const AuthProvider = ({ children }: PropsWithChildren) => {
       provider: "google",
       options: {
         redirectTo: `${window.location.origin}/auth`,
+        queryParams: {
+          prompt: "select_account",
+        },
       },
     });
     if (error) {
