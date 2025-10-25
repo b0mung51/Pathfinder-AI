@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { Navbar } from "@/components/Navbar";
 import { CollegeCard } from "@/components/CollegeCard";
 import { Button } from "@/components/ui/button";
@@ -6,41 +6,63 @@ import { Input } from "@/components/ui/input";
 import { Card } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Search as SearchIcon, SlidersHorizontal } from "lucide-react";
+import { supabase } from "@/lib/supabaseClient";
+import { log } from "console";
 
-const mockColleges = [
+export const mockColleges = [
   {
     id: "1",
     name: "Stanford University",
     location: "Stanford, CA",
-    size: "Medium (7,000)",
-    cost: "$55k/year",
+    ranking: 3,
+    url: "https://www.stanford.edu",
+    gradRate: 94,
+    averageCost: "$55,473",
+    acceptanceRate: 4,
+    medianSalary: 128000,
+    size: 7000,
     major: "Computer Science",
-    matchScore: 85,
+    matchScore: 89,
   },
   {
     id: "2",
-    name: "MIT",
+    name: "Massachusetts Institute of Technology (MIT)",
     location: "Cambridge, MA",
-    size: "Medium (4,500)",
-    cost: "$53k/year",
+    ranking: 2,
+    url: "https://www.mit.edu",
+    gradRate: 95,
+    averageCost: "$53,790",
+    acceptanceRate: 7,
+    medianSalary: 135000,
+    size: 4500,
     major: "Engineering",
-    matchScore: 82,
+    matchScore: 86,
   },
   {
     id: "3",
-    name: "UC Berkeley",
+    name: "University of California, Berkeley",
     location: "Berkeley, CA",
-    size: "Large (31,000)",
-    cost: "$43k/year",
+    ranking: 22,
+    url: "https://www.berkeley.edu",
+    gradRate: 91,
+    averageCost: "$43,232",
+    acceptanceRate: 15,
+    medianSalary: 110000,
+    size: 31000,
     major: "Computer Science",
-    matchScore: 80,
+    matchScore: 81,
   },
   {
     id: "4",
-    name: "Carnegie Mellon",
+    name: "Carnegie Mellon University",
     location: "Pittsburgh, PA",
-    size: "Medium (7,000)",
-    cost: "$58k/year",
+    ranking: 25,
+    url: "https://www.cmu.edu",
+    gradRate: 90,
+    averageCost: "$58,924",
+    acceptanceRate: 13,
+    medianSalary: 115000,
+    size: 7000,
     major: "Computer Science",
     matchScore: 78,
   },
@@ -48,24 +70,37 @@ const mockColleges = [
     id: "5",
     name: "University of Washington",
     location: "Seattle, WA",
-    size: "Large (47,000)",
-    cost: "$38k/year",
+    ranking: 40,
+    url: "https://www.washington.edu",
+    gradRate: 84,
+    averageCost: "$38,312",
+    acceptanceRate: 48,
+    medianSalary: 98000,
+    size: 47000,
     major: "Computer Science",
     matchScore: 75,
   },
   {
     id: "6",
-    name: "Georgia Tech",
+    name: "Georgia Institute of Technology",
     location: "Atlanta, GA",
-    size: "Large (16,000)",
-    cost: "$33k/year",
+    ranking: 33,
+    url: "https://www.gatech.edu",
+    gradRate: 88,
+    averageCost: "$33,964",
+    acceptanceRate: 18,
+    medianSalary: 102000,
+    size: 16000,
     major: "Computer Science",
     matchScore: 76,
   },
 ];
 
 export default function Search() {
+  // selectedColleges has Ids
   const [selectedColleges, setSelectedColleges] = useState<string[]>([]);
+  // colleges has all data for colleges 
+  const [colleges, setColleges] = useState<any[]>([]);
   const [searchQuery, setSearchQuery] = useState("");
 
   const handleSelect = (id: string) => {
@@ -74,10 +109,43 @@ export default function Search() {
     );
   };
 
-  const filteredColleges = mockColleges.filter((college) =>
-    college.name.toLowerCase().includes(searchQuery.toLowerCase())
-  );
+  useEffect(() => {
+    const fetchCollege = async () => {
+      // If no user input, return empty results
+      if(!searchQuery.trim()) {
+        setColleges(mockColleges)
+        return
+      }
 
+      // Fetch fuzzy results using user input
+      const {data: collegeData, error: collegeError} = await supabase
+        .from("colleges")
+        .select()
+        .textSearch("title", searchQuery.toLowerCase())
+
+      // Fetch program from college
+      const {data: programData, error: programError} = await supabase
+        .from("programs")
+        .select("*")
+        .ilike("field_of_study", searchQuery.toLowerCase())
+
+      const combinedResults = collegeData.map((college) => {
+        const relatedPrograms = programData.filter(
+          (program) => program.college_id === college.college_id
+        )
+        
+        return {
+          ...collegeData,
+          programs: relatedPrograms,
+          score: Math.floor(Math.random() * 100) + 1, // Random "match" score
+        }
+      })
+
+      setColleges(combinedResults)
+    }
+    fetchCollege()
+  }, [searchQuery]);
+  
   return (
     <div className="min-h-screen bg-background">
       <Navbar />
@@ -114,12 +182,10 @@ export default function Search() {
 
             {/* Results */}
             <div className="space-y-4">
-              {filteredColleges.map((college) => (
+              {colleges.map((college) => (
                 <CollegeCard
-                  key={college.id}
+                  key={college.college_id}
                   {...college}
-                  selected={selectedColleges.includes(college.id)}
-                  onSelect={handleSelect}
                 />
               ))}
             </div>

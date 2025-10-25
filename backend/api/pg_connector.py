@@ -11,7 +11,6 @@ class SupabaseConnector:
             college_id SERIAL PRIMARY KEY,
             name VARCHAR(100) UNIQUE NOT NULL,
             location VARCHAR(100),
-            state VARCHAR(50),
             ranking INT,
             url VARCHAR(100),
             grad_rate FLOAT,
@@ -19,7 +18,6 @@ class SupabaseConnector:
             acceptance_rate FLOAT,
             median_salary FLOAT,
             size INT,
-            median_earnings FLOAT,
             created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
         """,
         "programs": """
