@@ -1,0 +1,116 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+/* Definition of the design system. All colors, gradients, fonts, etc should be defined here. 
+All colors MUST be HSL.
+*/
+
+@layer base {
+  :root {
+    --background: 0 0% 100%;
+    --foreground: 220 15% 15%;
+
+    --card: 0 0% 100%;
+    --card-foreground: 220 15% 15%;
+
+    --popover: 0 0% 100%;
+    --popover-foreground: 220 15% 15%;
+
+    --primary: 215 85% 55%;
+    --primary-foreground: 0 0% 100%;
+
+    --secondary: 215 20% 95%;
+    --secondary-foreground: 215 85% 55%;
+
+    --muted: 220 15% 96%;
+    --muted-foreground: 220 10% 50%;
+
+    --accent: 215 90% 65%;
+    --accent-foreground: 0 0% 100%;
+
+    --destructive: 0 72% 51%;
+    --destructive-foreground: 0 0% 100%;
+
+    --border: 220 15% 90%;
+    --input: 220 15% 90%;
+    --ring: 215 85% 55%;
+
+    --radius: 0.75rem;
+
+    /* Custom tokens for PathFinder */
+    --primary-glow: 215 90% 65%;
+    --gradient-primary: linear-gradient(135deg, hsl(215 85% 55%), hsl(215 90% 65%));
+    --gradient-subtle: linear-gradient(180deg, hsl(0 0% 100%), hsl(215 20% 98%));
+    --shadow-card: 0 2px 8px -2px hsl(215 20% 70% / 0.15);
+    --shadow-card-hover: 0 8px 24px -4px hsl(215 30% 60% / 0.2);
+    --transition-smooth: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+  }
+
+  .dark {
+    --background: 220 20% 10%;
+    --foreground: 0 0% 95%;
+
+    --card: 220 20% 12%;
+    --card-foreground: 0 0% 95%;
+
+    --popover: 220 20% 12%;
+    --popover-foreground: 0 0% 95%;
+
+    --primary: 215 85% 60%;
+    --primary-foreground: 0 0% 100%;
+
+    --secondary: 220 15% 20%;
+    --secondary-foreground: 215 85% 65%;
+
+    --muted: 220 15% 18%;
+    --muted-foreground: 220 10% 60%;
+
+    --accent: 215 90% 70%;
+    --accent-foreground: 220 20% 10%;
+
+    --destructive: 0 72% 51%;
+    --destructive-foreground: 0 0% 100%;
+
+    --border: 220 15% 25%;
+    --input: 220 15% 25%;
+    --ring: 215 85% 60%;
+  }
+}
+
+@layer base {
+  * {
+    @apply border-border;
+  }
+
+  body {
+    @apply bg-background text-foreground antialiased;
+    font-feature-settings: "rlig" 1, "calt" 1;
+  }
+
+  html {
+    scroll-behavior: smooth;
+  }
+}
+
+@layer utilities {
+  .transition-smooth {
+    transition: var(--transition-smooth);
+  }
+
+  .shadow-card {
+    box-shadow: var(--shadow-card);
+  }
+
+  .shadow-card-hover {
+    box-shadow: var(--shadow-card-hover);
+  }
+
+  .gradient-primary {
+    background: var(--gradient-primary);
+  }
+
+  .gradient-subtle {
+    background: var(--gradient-subtle);
+  }
+}
