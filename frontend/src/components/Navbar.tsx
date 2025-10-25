@@ -1,7 +1,9 @@
-import { Link, useLocation } from "react-router-dom";
-import { GraduationCap, Search, ListChecks, User } from "lucide-react";
+import { Link, useLocation, useNavigate } from "react-router-dom";
+import { GraduationCap, Search, ListChecks, User, LogOut, LogIn } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { cn } from "@/lib/utils";
+import { useAuth } from "@/hooks/useAuth";
+import { useToast } from "@/hooks/use-toast";
 
 const navItems = [
   { label: "Dashboard", path: "/", icon: GraduationCap },
@@ -12,6 +14,9 @@ const navItems = [
 
 export function Navbar() {
   const location = useLocation();
+  const navigate = useNavigate();
+  const { user, isAuthenticating, signOut } = useAuth();
+  const { toast } = useToast();
 
   return (
     <nav className="sticky top-0 z-50 w-full border-b bg-background/95 backdrop-blur supports-[backdrop-filter]:bg-background/80">
@@ -44,6 +49,48 @@ export function Navbar() {
               </Button>
             );
           })}
+        </div>
+
+        <div className="flex items-center gap-2">
+          {!user ? (
+            <Button
+              variant="secondary"
+              size="sm"
+              className="transition-smooth"
+              disabled={isAuthenticating}
+              onClick={() => navigate("/auth")}
+            >
+              <LogIn className="mr-2 h-4 w-4" />
+              Sign In
+            </Button>
+          ) : (
+            <Button
+              variant="outline"
+              size="sm"
+              className="transition-smooth"
+              disabled={isAuthenticating}
+              onClick={async () => {
+                try {
+                  await signOut();
+                  toast({
+                    title: "Signed out",
+                    description: "Come back soon!",
+                  });
+                  navigate("/", { replace: true });
+                } catch (error) {
+                  const message = error instanceof Error ? error.message : "Unable to sign out.";
+                  toast({
+                    title: "Sign out failed",
+                    description: message,
+                    variant: "destructive",
+                  });
+                }
+              }}
+            >
+              <LogOut className="mr-2 h-4 w-4" />
+              Sign Out
+            </Button>
+          )}
         </div>
       </div>
     </nav>
