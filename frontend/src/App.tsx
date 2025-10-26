@@ -13,6 +13,7 @@ import ProgramSearch from "./pages/ProgramSearch";
 import CollegeList from "./pages/CollegeList";
 import Profile from "./pages/Profile";
 import NotFound from "./pages/NotFound";
+import Tracks from "./pages/Tracks";
 
 const queryClient = new QueryClient();
 
@@ -30,6 +31,7 @@ const App = () => (
             <Route path="/dashboard" element={<Dashboard />} />
             <Route path="/search" element={<Search />} />
             <Route path="/program-search" element={<ProgramSearch />} />
+            <Route path="/tracks" element={<Tracks />} />
             <Route path="/list" element={<CollegeList />} />
             <Route path="/profile" element={<Profile />} />
             {/* ADD ALL CUSTOM ROUTES ABOVE THE CATCH-ALL "*" ROUTE */}

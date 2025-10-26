@@ -332,6 +332,48 @@ create policy "Saved programs - owner can delete"
   using (auth.uid() = user_id);
 
 -- ---------------------------------------------------------------------------
+-- Tracks (legacy-compatible user pathways)
+-- ---------------------------------------------------------------------------
+drop table if exists public.user_track_items cascade;
+drop table if exists public.user_tracks cascade;
+
+create table if not exists public.tracks (
+  id bigserial primary key,
+  trackname text not null,
+  userid uuid not null references auth.users(id) on delete cascade,
+  college_id bigint references public.colleges(id) on delete cascade,
+  program_id bigint references public.programs(id) on delete cascade,
+  match_rating numeric,
+  constraint tracks_requires_target check (college_id is not null or program_id is not null)
+);
+
+create index if not exists tracks_userid_idx on public.tracks(userid);
+create index if not exists tracks_trackname_idx on public.tracks(trackname);
+
+alter table public.tracks enable row level security;
+
+drop policy if exists "Tracks - owner can read" on public.tracks;
+create policy "Tracks - owner can read"
+  on public.tracks for select
+  using (auth.uid() = userid);
+
+drop policy if exists "Tracks - owner can insert" on public.tracks;
+create policy "Tracks - owner can insert"
+  on public.tracks for insert
+  with check (auth.uid() = userid);
+
+drop policy if exists "Tracks - owner can update" on public.tracks;
+create policy "Tracks - owner can update"
+  on public.tracks for update
+  using (auth.uid() = userid)
+  with check (auth.uid() = userid);
+
+drop policy if exists "Tracks - owner can delete" on public.tracks;
+create policy "Tracks - owner can delete"
+  on public.tracks for delete
+  using (auth.uid() = userid);
+
+-- ---------------------------------------------------------------------------
 -- Match recommendations cache
 -- ---------------------------------------------------------------------------
 create table if not exists public.match_recommendations (
