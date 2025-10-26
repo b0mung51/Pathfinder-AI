@@ -10,12 +10,18 @@ import { Search as SearchIcon, SlidersHorizontal } from "lucide-react";
 import { supabase } from "@/lib/supabaseClient";
 import { College, Program } from "@/types/college";
 import { useCollegeSelection } from "@/hooks/useCollegeSelection";
+import { useAuth } from "@/hooks/useAuth";
+import { useToast } from "@/hooks/use-toast";
+import { Loader2 } from "lucide-react";
 
 export default function Search() {
   const [colleges, setColleges] = useState<College[]>([]);
   const [searchQuery, setSearchQuery] = useState("");
   const [error, setError] = useState<string | null>(null);
   const [loading, setLoading] = useState(false);
+  const [isSaving, setIsSaving] = useState(false);
+  const { user, isAuthenticating } = useAuth();
+  const { toast } = useToast();
 
   const {
     selectedColleges,
@@ -243,9 +249,70 @@ export default function Search() {
                   <Button
                     variant="outline"
                     className="w-full"
-                    disabled={selectedColleges.length === 0}
+                    disabled={selectedColleges.length === 0 || !user || isSaving || isAuthenticating}
+                    onClick={async () => {
+                      if (!user) {
+                        toast({
+                          title: "Sign in required",
+                          description: "Please sign in to save colleges to your list.",
+                          variant: "destructive",
+                        });
+                        return;
+                      }
+
+                      const payload = selectedColleges
+                        .map((id) => {
+                          const college = colleges.find((c) => c.id === id);
+                          if (!college) {
+                            return null;
+                          }
+                          return {
+                            user_id: user.id,
+                            college_id: Number(college.id),
+                            match_score: college.matchScore ?? null,
+                          };
+                        })
+                        .filter((entry): entry is { user_id: string; college_id: number; match_score: number | null } => Boolean(entry));
+
+                      if (payload.length === 0) {
+                        toast({
+                          title: "No colleges to save",
+                          description: "Select at least one college to add to your list.",
+                          variant: "destructive",
+                        });
+                        return;
+                      }
+
+                      setIsSaving(true);
+                      const { error: saveError } = await supabase
+                        .from("saved_colleges")
+                        .upsert(payload, { onConflict: "user_id,college_id" });
+                      setIsSaving(false);
+
+                      if (saveError) {
+                        console.error("Failed to save colleges", saveError);
+                        toast({
+                          title: "Save failed",
+                          description: "We couldn't save your colleges. Please try again.",
+                          variant: "destructive",
+                        });
+                        return;
+                      }
+
+                      toast({
+                        title: "Colleges saved",
+                        description: "Your selections are now in My List.",
+                      });
+                    }}
                   >
-                    Save ({selectedColleges.length})
+                    {isSaving ? (
+                      <span className="flex items-center justify-center gap-2">
+                        <Loader2 className="h-4 w-4 animate-spin" />
+                        Saving...
+                      </span>
+                    ) : (
+                      <>Save ({selectedColleges.length})</>
+                    )}
                   </Button>
                 </div>
               )}
