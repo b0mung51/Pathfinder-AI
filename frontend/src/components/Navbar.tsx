@@ -6,7 +6,7 @@ import { useAuth } from "@/hooks/useAuth";
 import { useToast } from "@/hooks/use-toast";
 
 const navItems = [
-  { label: "Dashboard", path: "/", icon: GraduationCap },
+  { label: "Dashboard", path: "/dashboard", icon: GraduationCap },
   { label: "College Search", path: "/search", icon: Search },
   { label: "My List", path: "/list", icon: ListChecks },
   { label: "Profile", path: "/profile", icon: User },
@@ -26,30 +26,34 @@ export function Navbar() {
           <span className="text-xl font-bold">PathFinder AI</span>
         </Link>
 
-        <div className="flex items-center gap-1">
-          {navItems.map((item) => {
-            const Icon = item.icon;
-            const isActive = location.pathname === item.path;
-            
-            return (
-              <Button
-                key={item.path}
-                variant={isActive ? "default" : "ghost"}
-                size="sm"
-                asChild
-                className={cn(
-                  "transition-smooth",
-                  isActive && "shadow-card"
-                )}
-              >
-                <Link to={item.path}>
-                  <Icon className="h-4 w-4" />
-                  <span className="hidden md:inline">{item.label}</span>
-                </Link>
-              </Button>
-            );
-          })}
-        </div>
+        {location.pathname !== "/" ? (
+          <div className="flex items-center gap-1">
+            {navItems.map((item) => {
+              const Icon = item.icon;
+              const isActive = location.pathname === item.path;
+              
+              return (
+                <Button
+                  key={item.path}
+                  variant={isActive ? "default" : "ghost"}
+                  size="sm"
+                  asChild
+                  className={cn(
+                    "transition-smooth",
+                    isActive && "shadow-card"
+                  )}
+                >
+                  <Link to={item.path}>
+                    <Icon className="h-4 w-4" />
+                    <span className="hidden md:inline">{item.label}</span>
+                  </Link>
+                </Button>
+              );
+            })}
+          </div>
+        ) : (
+          <div />
+        )}
 
         <div className="flex items-center gap-2">
           {!user ? (
