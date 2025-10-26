@@ -184,7 +184,7 @@ export default function Search() {
                       acceptanceRate={college.acceptance_rate}
                       medianSalary={college.median_salary}
                       size={college.size}
-                      major={college.programs?.[0]?.field_of_study || 'Not specified'}
+                      majors={college.programs?.[0]?.field_of_study || 'Not specified'}
                       matchScore={college.matchScore || 75}
                       description={description}
                       programs={programNames}
