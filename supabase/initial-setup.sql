@@ -129,9 +129,6 @@ as $$
 begin
   if new.acceptance_rate is not null then
     new.acceptance_rate := new.acceptance_rate * 100;
-  if new.rejection_rate is not null then
-    new.rejection_rate := new.rejection_rate * 100;
-  end if;
   end if;
   return new;
 end;
@@ -140,7 +137,7 @@ $$;
 drop trigger if exists colleges_scale_rate on public.colleges;
 create trigger colleges_scale_rate
 before insert on public.colleges
-for each row execute function public.scale_rate();
+for each row execute function public.scale_rates();
 
 alter table public.colleges enable row level security;
 
@@ -254,4 +251,132 @@ create policy "Tasks - owner can update"
 drop policy if exists "Tasks - owner can delete" on public.tasks;
 create policy "Tasks - owner can delete"
   on public.tasks for delete
+  using (auth.uid() = user_id);
+
+-- ---------------------------------------------------------------------------
+-- Saved colleges (user-managed lists)
+-- ---------------------------------------------------------------------------
+create table if not exists public.saved_colleges (
+  id uuid primary key default gen_random_uuid(),
+  user_id uuid not null references auth.users on delete cascade,
+  college_id bigint not null references public.colleges(id) on delete cascade,
+  match_score numeric,
+  created_at timestamptz default timezone('utc'::text, now()),
+  updated_at timestamptz default timezone('utc'::text, now()),
+  unique (user_id, college_id)
+);
+
+alter table public.saved_colleges enable row level security;
+
+drop trigger if exists saved_colleges_set_updated_at on public.saved_colleges;
+create trigger saved_colleges_set_updated_at
+before update on public.saved_colleges
+for each row execute function public.touch_updated_at();
+
+drop policy if exists "Saved colleges - owner can read" on public.saved_colleges;
+create policy "Saved colleges - owner can read"
+  on public.saved_colleges for select
+  using (auth.uid() = user_id);
+
+drop policy if exists "Saved colleges - owner can insert" on public.saved_colleges;
+create policy "Saved colleges - owner can insert"
+  on public.saved_colleges for insert
+  with check (auth.uid() = user_id);
+
+drop policy if exists "Saved colleges - owner can update" on public.saved_colleges;
+create policy "Saved colleges - owner can update"
+  on public.saved_colleges for update
+  using (auth.uid() = user_id)
+  with check (auth.uid() = user_id);
+
+drop policy if exists "Saved colleges - owner can delete" on public.saved_colleges;
+create policy "Saved colleges - owner can delete"
+  on public.saved_colleges for delete
+  using (auth.uid() = user_id);
+
+-- ---------------------------------------------------------------------------
+-- Match recommendations cache
+-- ---------------------------------------------------------------------------
+create table if not exists public.match_recommendations (
+  id uuid primary key default gen_random_uuid(),
+  user_id uuid not null references auth.users(id) on delete cascade,
+  college_id bigint not null references public.colleges(id) on delete cascade,
+  score numeric not null,
+  heuristic_score numeric,
+  notes text[],
+  llm jsonb,
+  created_at timestamptz default timezone('utc'::text, now()),
+  updated_at timestamptz default timezone('utc'::text, now()),
+  unique (user_id, college_id)
+);
+
+alter table public.match_recommendations enable row level security;
+
+drop trigger if exists match_recommendations_touch on public.match_recommendations;
+create trigger match_recommendations_touch
+before update on public.match_recommendations
+for each row execute function public.touch_updated_at();
+
+drop policy if exists "Match recs - owner can read" on public.match_recommendations;
+create policy "Match recs - owner can read"
+  on public.match_recommendations for select
+  using (auth.uid() = user_id);
+
+drop policy if exists "Match recs - owner can insert" on public.match_recommendations;
+create policy "Match recs - owner can insert"
+  on public.match_recommendations for insert
+  with check (auth.uid() = user_id);
+
+drop policy if exists "Match recs - owner can update" on public.match_recommendations;
+create policy "Match recs - owner can update"
+  on public.match_recommendations for update
+  using (auth.uid() = user_id)
+  with check (auth.uid() = user_id);
+
+drop policy if exists "Match recs - owner can delete" on public.match_recommendations;
+create policy "Match recs - owner can delete"
+  on public.match_recommendations for delete
+  using (auth.uid() = user_id);
+
+-- ---------------------------------------------------------------------------
+-- AI insights cache
+-- ---------------------------------------------------------------------------
+create table if not exists public.match_insights (
+  id uuid primary key default gen_random_uuid(),
+  user_id uuid not null references auth.users(id) on delete cascade,
+  sort_order smallint not null default 0,
+  title text not null,
+  insight text not null,
+  metadata jsonb,
+  created_at timestamptz default timezone('utc'::text, now()),
+  updated_at timestamptz default timezone('utc'::text, now()),
+  unique (user_id, sort_order)
+);
+
+alter table public.match_insights enable row level security;
+
+drop trigger if exists match_insights_touch on public.match_insights;
+create trigger match_insights_touch
+before update on public.match_insights
+for each row execute function public.touch_updated_at();
+
+drop policy if exists "Match insights - owner can read" on public.match_insights;
+create policy "Match insights - owner can read"
+  on public.match_insights for select
+  using (auth.uid() = user_id);
+
+drop policy if exists "Match insights - owner can insert" on public.match_insights;
+create policy "Match insights - owner can insert"
+  on public.match_insights for insert
+  with check (auth.uid() = user_id);
+
+drop policy if exists "Match insights - owner can update" on public.match_insights;
+create policy "Match insights - owner can update"
+  on public.match_insights for update
+  using (auth.uid() = user_id)
+  with check (auth.uid() = user_id);
+
+drop policy if exists "Match insights - owner can delete" on public.match_insights;
+create policy "Match insights - owner can delete"
+  on public.match_insights for delete
   using (auth.uid() = user_id);

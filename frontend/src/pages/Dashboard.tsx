@@ -3,7 +3,6 @@ import { Navbar } from "@/components/Navbar";
 import { Card } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
-import { Progress } from "@/components/ui/progress";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { useAuth } from "@/hooks/useAuth";
@@ -12,46 +11,14 @@ import { Target, TrendingUp, Calendar, Plus, CheckCircle2, Loader2, X } from "lu
 
 const API_BASE_URL = import.meta.env.VITE_API_BASE_URL ?? "http://127.0.0.1:8000/api";
 
-type Track = {
+type SavedTrack = {
   id: string;
-  college: string;
-  major: string;
-  matchScore: number;
+  college_id: number | string;
+  college_name: string;
+  location?: string | null;
+  ranking?: number | null;
+  match_score?: number | null;
 };
-
-const initialTracks: Track[] = [
-  {
-    id: "track-1",
-    college: "Stanford University",
-    major: "Computer Science",
-    matchScore: 85,
-  },
-  {
-    id: "track-2",
-    college: "University of Pennsylvania (Wharton)",
-    major: "Business Administration",
-    matchScore: 78,
-  },
-  {
-    id: "track-3",
-    college: "Massachusetts Institute of Technology",
-    major: "Mechanical Engineering",
-    matchScore: 82,
-  },
-];
-
-const insights = [
-  {
-    title: "Strong Research Match",
-    description: "Your profile aligns well with research-focused universities",
-    icon: Target,
-  },
-  {
-    title: "Mid-Sized Preferences",
-    description: "Schools with 5,000-15,000 students fit your criteria best",
-    icon: TrendingUp,
-  },
-];
 
 type Task = {
   id: string;
@@ -64,49 +31,58 @@ type Task = {
 type MatchResult = {
   college_id: number | string;
   college_name: string;
+  location?: string | null;
+  average_cost?: number | null;
+  acceptance_rate?: number | null;
+  ranking?: number | null;
   score: number;
+  heuristic_score?: number;
+  notes?: string[];
+};
+
+type Insight = {
+  title: string;
+  description: string;
+  metadata?: unknown;
+};
+
+type Insight = {
+  title: string;
+  description: string;
+  metadata?: unknown;
 };
 
 export default function Dashboard() {
   const { user, isAuthenticating } = useAuth();
-  const [tracks, setTracks] = useState<Track[]>(initialTracks);
+  const [savedTracks, setSavedTracks] = useState<SavedTrack[]>([]);
   const [tasks, setTasks] = useState<Task[]>([]);
   const [matches, setMatches] = useState<MatchResult[]>([]);
+  const [insightsData, setInsightsData] = useState<Insight[]>([]);
   const [isLoadingTasks, setIsLoadingTasks] = useState(false);
   const [isLoadingMatches, setIsLoadingMatches] = useState(false);
+  const [isLoadingInsights, setIsLoadingInsights] = useState(false);
+  const [isRefreshingMatches, setIsRefreshingMatches] = useState(false);
+  const [isRefreshingInsights, setIsRefreshingInsights] = useState(false);
+  const [isLoadingTracks, setIsLoadingTracks] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [matchError, setMatchError] = useState<string | null>(null);
-  const [trackError, setTrackError] = useState<string | null>(null);
+  const [tracksError, setTracksError] = useState<string | null>(null);
+  const [insightsError, setInsightsError] = useState<string | null>(null);
   const [newTaskTitle, setNewTaskTitle] = useState("");
   const [newTaskDueDate, setNewTaskDueDate] = useState("");
   const [isSavingTask, setIsSavingTask] = useState(false);
-  const [newTrackCollege, setNewTrackCollege] = useState("");
-  const [newTrackMajor, setNewTrackMajor] = useState("");
 
-  const matchScoreColor = useCallback((score: number) => {
-    if (score >= 80) {
-      return "text-green-600";
-    }
-    if (score >= 70) {
-      return "text-blue-600";
-    }
-    return "text-yellow-600";
-  }, []);
+const matchScoreColor = useCallback((score: number) => {
+  if (score >= 80) {
+    return "text-green-600";
+  }
+  if (score >= 70) {
+    return "text-blue-600";
+  }
+  return "text-yellow-600";
+}, []);
 
-  const createTrackId = useCallback(() => {
-    if (typeof crypto !== "undefined" && "randomUUID" in crypto) {
-      return crypto.randomUUID();
-    }
-    return Math.random().toString(36).slice(2);
-  }, []);
-
-  const generateMatchScore = useCallback(() => {
-    const base = 70;
-    const variance = Math.floor(Math.random() * 21); // 0-20
-    return base + variance;
-  }, []);
-
-  const fetchTasks = useCallback(async () => {
+const fetchTasks = useCallback(async () => {
     if (!user) {
       setTasks([]);
       return;
@@ -139,102 +115,259 @@ export default function Dashboard() {
     }
   }, [isAuthenticating, fetchTasks]);
 
-  useEffect(() => {
+  const loadCachedMatches = useCallback(async () => {
     if (!user) {
+      setMatches([]);
+      setMatchError(null);
+      setIsLoadingMatches(false);
+      return;
+    }
+
+    setIsLoadingMatches(true);
+    setMatchError(null);
+
+    const { data, error } = await supabase
+      .from("match_recommendations")
+      .select(
+        `
+          score,
+          heuristic_score,
+          notes,
+          llm,
+          college_id,
+          colleges:college_id (
+            id,
+            name,
+            location,
+            average_cost,
+            acceptance_rate,
+            ranking
+          )
+        `
+      )
+      .eq("user_id", user.id)
+      .order("score", { ascending: false });
+
+    if (error) {
+      console.error("Failed to load cached match scores", error);
+      setMatchError("Unable to load match scores at the moment.");
       setMatches([]);
       setIsLoadingMatches(false);
       return;
     }
 
-    let isActive = true;
-    const controller = new AbortController();
+    const mapped =
+      data?.map((row) => ({
+        college_id: row.college_id ?? crypto.randomUUID(),
+        college_name: row.colleges?.name ?? "Unknown college",
+        location: row.colleges?.location ?? null,
+        average_cost: row.colleges?.average_cost ?? null,
+        acceptance_rate: row.colleges?.acceptance_rate ?? null,
+        ranking: row.colleges?.ranking ?? null,
+        score: typeof row.score === "number" ? Number(row.score) : 0,
+        heuristic_score:
+          typeof row.heuristic_score === "number"
+            ? Number(row.heuristic_score)
+            : undefined,
+        notes: Array.isArray(row.notes) ? row.notes : undefined,
+      })) ?? [];
 
-    const fetchMatches = async () => {
-      setIsLoadingMatches(true);
-      setMatchError(null);
-
-      try {
-        const url = new URL("/match-scores/", API_BASE_URL);
-        url.searchParams.set("user_id", user.id);
-        url.searchParams.set("limit", "5");
-        url.searchParams.set("use_llm", "true");
-
-        const response = await fetch(url.toString(), {
-          signal: controller.signal,
-          headers: {
-            "Content-Type": "application/json",
-          },
-        });
-
-        if (!response.ok) {
-          throw new Error(`Failed to load match scores (${response.status})`);
-        }
-
-        const payload = await response.json();
-        if (!isActive) return;
-
-        const simplified = Array.isArray(payload.results)
-          ? payload.results.map((item: Record<string, unknown>) => ({
-              college_id: item.college_id ?? item.id ?? crypto.randomUUID(),
-              college_name: String(item.college_name ?? item.name ?? "Unknown college"),
-              score: typeof item.score === "number" ? item.score : Number(item.score) || 0,
-            }))
-          : [];
-
-        setMatches(simplified);
-        setMatchError(null);
-      } catch (err) {
-        if (controller.signal.aborted) return;
-        console.error("Failed to fetch match scores", err);
-        setMatchError("Unable to load match scores at the moment.");
-        setMatches([]);
-      } finally {
-        if (isActive) {
-          setIsLoadingMatches(false);
-        }
-      }
-    };
-
-    void fetchMatches();
-
-    return () => {
-      isActive = false;
-      controller.abort();
-    };
+    setMatches(mapped.slice(0, 5));
+    setMatchError(null);
+    setIsLoadingMatches(false);
   }, [user]);
 
-  useEffect(() => {
-    console.log("Dashboard user:", user?.id);
-  }, [user]);
-  const handleAddTrack = (event: FormEvent<HTMLFormElement>) => {
-    event.preventDefault();
-
-    const trimmedCollege = newTrackCollege.trim();
-    const trimmedMajor = newTrackMajor.trim();
-
-    if (!trimmedCollege || !trimmedMajor) {
-      setTrackError("Both college and major are required.");
+  const refreshMatches = useCallback(async () => {
+    if (!user) {
       return;
     }
 
-    const matchScore = generateMatchScore();
+    setIsRefreshingMatches(true);
+    setMatchError(null);
 
-    const nextTrack: Track = {
-      id: createTrackId(),
-      college: trimmedCollege,
-      major: trimmedMajor,
-      matchScore,
+    try {
+      const base = API_BASE_URL.endsWith("/") ? API_BASE_URL : `${API_BASE_URL}/`;
+      const url = new URL("match-scores/", base);
+      url.searchParams.set("user_id", user.id);
+      url.searchParams.set("limit", "5");
+      url.searchParams.set("use_llm", "true");
+      url.searchParams.set("refresh", "true");
+
+      const response = await fetch(url.toString(), {
+        headers: {
+          "Content-Type": "application/json",
+        },
+      });
+
+      if (!response.ok) {
+        throw new Error(`Failed to refresh match scores (${response.status})`);
+      }
+
+      await loadCachedMatches();
+    } catch (err) {
+      console.error("Failed to refresh match scores", err);
+      setMatchError("Unable to refresh match scores right now.");
+    } finally {
+      setIsRefreshingMatches(false);
+    }
+  }, [user, loadCachedMatches]);
+
+  const loadCachedInsights = useCallback(async () => {
+    if (!user) {
+      setInsightsData([]);
+      setInsightsError(null);
+      setIsLoadingInsights(false);
+      return;
+    }
+
+    setIsLoadingInsights(true);
+    setInsightsError(null);
+
+    const { data, error } = await supabase
+      .from("match_insights")
+      .select("title, insight, metadata")
+      .eq("user_id", user.id)
+      .order("sort_order", { ascending: true });
+
+    if (error) {
+      console.error("Failed to load insights", error);
+      setInsightsError("Unable to load insights at the moment.");
+      setInsightsData([]);
+    } else {
+      const mapped =
+        data?.map((row) => ({
+          title: row.title ?? "",
+          description: row.insight ?? "",
+          metadata: row.metadata,
+        })) ?? [];
+      setInsightsData(mapped.slice(0, 3));
+      setInsightsError(null);
+    }
+
+    setIsLoadingInsights(false);
+  }, [user]);
+
+  const refreshInsights = useCallback(async () => {
+    if (!user) {
+      return;
+    }
+
+    setIsRefreshingInsights(true);
+    setInsightsError(null);
+
+    try {
+      const base = API_BASE_URL.endsWith("/") ? API_BASE_URL : `${API_BASE_URL}/`;
+      const url = new URL("match-insights/", base);
+      url.searchParams.set("user_id", user.id);
+      url.searchParams.set("refresh", "true");
+
+      const response = await fetch(url.toString(), {
+        headers: {
+          "Content-Type": "application/json",
+        },
+      });
+
+      if (!response.ok) {
+        throw new Error(`Failed to refresh insights (${response.status})`);
+      }
+
+      await loadCachedInsights();
+    } catch (err) {
+      console.error("Failed to refresh insights", err);
+      setInsightsError("Unable to refresh insights right now.");
+    } finally {
+      setIsRefreshingInsights(false);
+    }
+  }, [user, loadCachedInsights]);
+
+  useEffect(() => {
+    if (!user) {
+      setMatches([]);
+      setMatchError(null);
+      setIsLoadingMatches(false);
+      setIsRefreshingMatches(false);
+      return;
+    }
+    void loadCachedMatches();
+  }, [user, loadCachedMatches]);
+
+  useEffect(() => {
+    if (!user) {
+      setInsightsData([]);
+      setInsightsError(null);
+      setIsLoadingInsights(false);
+      setIsRefreshingInsights(false);
+      return;
+    }
+    void loadCachedInsights();
+  }, [user, loadCachedInsights]);
+
+  useEffect(() => {
+    if (!user) {
+      setSavedTracks([]);
+      setIsLoadingTracks(false);
+      setTracksError(null);
+      return;
+    }
+
+    let isMounted = true;
+
+    const fetchSavedTracks = async () => {
+      setIsLoadingTracks(true);
+      setTracksError(null);
+
+      const { data, error: trackFetchError } = await supabase
+        .from("saved_colleges")
+        .select(
+          `
+            id,
+            match_score,
+            college_id,
+            colleges:college_id (
+              name,
+              location,
+              ranking
+            )
+          `
+        )
+        .eq("user_id", user.id)
+        .order("created_at", { ascending: true });
+
+      if (!isMounted) {
+        return;
+      }
+
+      if (trackFetchError) {
+        console.error("Failed to load saved tracks", trackFetchError);
+        setSavedTracks([]);
+        setTracksError("Unable to load your saved tracks right now.");
+      } else {
+        const mapped =
+          data?.map((entry) => ({
+            id: entry.id,
+            college_id: entry.college_id,
+            college_name: entry.colleges?.name ?? "Unknown college",
+            location: entry.colleges?.location,
+            ranking: entry.colleges?.ranking ?? null,
+            match_score:
+              typeof entry.match_score === "number"
+                ? Number(entry.match_score)
+                : entry.match_score === null
+                ? null
+                : undefined,
+          })) ?? [];
+        setSavedTracks(mapped);
+      }
+
+      setIsLoadingTracks(false);
     };
 
-    setTracks((prevTracks) => [nextTrack, ...prevTracks]);
-    setNewTrackCollege("");
-    setNewTrackMajor("");
-    setTrackError(null);
-  };
+    void fetchSavedTracks();
 
-  const handleRemoveTrack = (trackId: string) => {
-    setTracks((prevTracks) => prevTracks.filter((track) => track.id !== trackId));
-  };
+    return () => {
+      isMounted = false;
+    };
+  }, [user]);
 
   const handleToggleTask = async (task: Task) => {
     if (!user) {
@@ -354,65 +487,46 @@ export default function Dashboard() {
                 My Tracks
               </h2>
               <div className="space-y-3">
-                <form onSubmit={handleAddTrack} className="space-y-3">
-                  <div className="space-y-2">
-                    <Label htmlFor="track-major">Intended major</Label>
-                    <Input
-                      id="track-major"
-                      placeholder="e.g. Computer Science"
-                      value={newTrackMajor}
-                      onChange={(event) => {
-                        if (trackError) {
-                          setTrackError(null);
-                        }
-                        setNewTrackMajor(event.target.value);
-                      }}
-                    />
+                {isAuthenticating ? (
+                  <p className="text-muted-foreground text-sm">Signing in...</p>
+                ) : !user ? (
+                  <p className="text-sm text-muted-foreground">
+                    Sign in to see colleges saved from your list.
+                  </p>
+                ) : isLoadingTracks ? (
+                  <div className="flex items-center justify-center py-6 text-muted-foreground">
+                    <Loader2 className="h-4 w-4 mr-2 animate-spin" />
+                    Loading your tracks...
                   </div>
-                  <div className="space-y-2">
-                    <Label htmlFor="track-college">College</Label>
-                    <Input
-                      id="track-college"
-                      placeholder="e.g. Stanford University"
-                      value={newTrackCollege}
-                      onChange={(event) => {
-                        if (trackError) {
-                          setTrackError(null);
-                        }
-                        setNewTrackCollege(event.target.value);
-                      }}
-                    />
-                  </div>
-                  {trackError ? <p className="text-sm text-destructive">{trackError}</p> : null}
-                  <Button type="submit" variant="outline" className="w-full">
-                    <Plus className="h-4 w-4 mr-2" />
-                    Add Track
-                  </Button>
-                </form>
-
-                {tracks.map((track) => (
-                  <Card
-                    key={track.id}
-                    className="p-4 hover:shadow-card transition-smooth border-l-4 border-l-primary relative"
-                  >
-                    <button
-                      type="button"
-                      className="absolute right-3 top-3 text-muted-foreground hover:text-destructive transition-smooth"
-                      aria-label={`Remove ${track.major} at ${track.college}`}
-                      onClick={() => handleRemoveTrack(track.id)}
+                ) : tracksError ? (
+                  <p className="text-sm text-destructive">{tracksError}</p>
+                ) : savedTracks.length === 0 ? (
+                  <p className="text-sm text-muted-foreground">
+                    Add colleges to your list to see them here.
+                  </p>
+                ) : (
+                  savedTracks.map((track) => (
+                    <Card
+                      key={track.id}
+                      className="p-4 hover:shadow-card transition-smooth border-l-4 border-l-primary"
                     >
-                      <X className="h-4 w-4" />
-                    </button>
-                    <h3 className="font-medium mb-2 pr-6">{`${track.major} @ ${track.college}`}</h3>
-                    <div className="flex items-center justify-between">
-                      <span className="text-sm text-muted-foreground">Match</span>
-                      <span className={`font-semibold ${matchScoreColor(track.matchScore)}`}>
-                        {track.matchScore}%
-                      </span>
-                    </div>
-                    <Progress value={track.matchScore} className="mt-2 h-1" />
-                  </Card>
-                ))}
+                      <h3 className="font-medium mb-2">{track.college_name}</h3>
+                      <div className="flex items-center justify-between text-sm text-muted-foreground">
+                        <span>{track.location ?? "Location unavailable"}</span>
+                        {typeof track.match_score === "number" ? (
+                          <span className={matchScoreColor(track.match_score)}>
+                            {track.match_score.toFixed(1)}%
+                          </span>
+                        ) : null}
+                      </div>
+                      {track.ranking ? (
+                        <div className="mt-2 text-xs text-muted-foreground">
+                          Ranking #{track.ranking}
+                        </div>
+                      ) : null}
+                    </Card>
+                  ))
+                )}
               </div>
             </Card>
           </div>
@@ -420,34 +534,79 @@ export default function Dashboard() {
           {/* Center Column - AI Insights */}
           <div className="lg:col-span-6 space-y-6">
             <Card className="p-6">
-              <h2 className="text-xl font-semibold mb-4 flex items-center gap-2">
-                <TrendingUp className="h-5 w-5 text-primary" />
-                AI Insights
-              </h2>
+              <div className="flex items-center justify-between mb-4">
+                <div className="flex items-center gap-2">
+                  <TrendingUp className="h-5 w-5 text-primary" />
+                  <h2 className="text-xl font-semibold">AI Insights</h2>
+                </div>
+                <Button
+                  variant="ghost"
+                  size="sm"
+                  disabled={
+                    isRefreshingInsights || isLoadingInsights || !user || isAuthenticating
+                  }
+                  onClick={() => void refreshInsights()}
+                >
+                  {isRefreshingInsights ? (
+                    <span className="flex items-center gap-2 text-sm">
+                      <Loader2 className="h-4 w-4 animate-spin" />
+                      Refreshing
+                    </span>
+                  ) : (
+                    "Refresh"
+                  )}
+                </Button>
+              </div>
               <div className="space-y-4">
-                {insights.map((insight, idx) => {
-                  const Icon = insight.icon;
-                  return (
-                    <Card key={idx} className="p-4 bg-secondary/50">
-                      <div className="flex gap-3">
-                        <div className="p-2 bg-primary/10 rounded-lg h-fit">
-                          <Icon className="h-5 w-5 text-primary" />
-                        </div>
-                        <div>
-                          <h3 className="font-semibold mb-1">{insight.title}</h3>
-                          <p className="text-sm text-muted-foreground">
-                            {insight.description}
-                          </p>
-                        </div>
-                      </div>
+                {isAuthenticating ? (
+                  <p className="text-muted-foreground text-sm">Signing in...</p>
+                ) : !user ? (
+                  <p className="text-sm text-muted-foreground">
+                    Sign in to receive personalized insights about your saved colleges.
+                  </p>
+                ) : isLoadingInsights ? (
+                  <div className="flex items-center justify-center py-6 text-muted-foreground">
+                    <Loader2 className="h-4 w-4 mr-2 animate-spin" />
+                    Loading insights...
+                  </div>
+                ) : insightsError ? (
+                  <p className="text-sm text-destructive">{insightsError}</p>
+                ) : insightsData.length === 0 ? (
+                  <p className="text-sm text-muted-foreground">
+                    {savedTracks.length === 0
+                      ? "Add colleges to your list to unlock tailored insights."
+                      : "Press refresh to generate your latest insights."}
+                  </p>
+                ) : (
+                  insightsData.map((insight, idx) => (
+                    <Card key={`${insight.title}-${idx}`} className="p-4 bg-secondary/50">
+                      <h3 className="font-semibold mb-1">{insight.title}</h3>
+                      <p className="text-sm text-muted-foreground">{insight.description}</p>
                     </Card>
-                  );
-                })}
+                  ))
+                )}
               </div>
             </Card>
 
             <Card className="p-6">
-              <h2 className="text-xl font-semibold mb-4">Top Recommended Colleges</h2>
+              <div className="flex items-center justify-between mb-4">
+                <h2 className="text-xl font-semibold">Top Recommended Colleges</h2>
+                  <Button
+                    variant="ghost"
+                    size="sm"
+                    disabled={isRefreshingMatches || isLoadingMatches || !user || isAuthenticating}
+                    onClick={() => void refreshMatches()}
+                >
+                  {isRefreshingMatches ? (
+                    <span className="flex items-center gap-2 text-sm">
+                      <Loader2 className="h-4 w-4 animate-spin" />
+                      Refreshing
+                    </span>
+                  ) : (
+                    "Refresh"
+                  )}
+                </Button>
+              </div>
               <div className="space-y-3">
                 {isAuthenticating && !user ? (
                   <p className="text-muted-foreground">Sign in to view personalized match scores.</p>
@@ -465,11 +624,52 @@ export default function Dashboard() {
                 ) : (
                   matches.map((match) => (
                     <Card key={match.college_id} className="p-4 hover:shadow-card transition-smooth cursor-pointer">
-                      <div className="flex items-center justify-between gap-3">
-                        <div>
-                          <h3 className="font-semibold">{match.college_name}</h3>
+                      <div className="flex flex-col gap-3">
+                        <div className="flex items-start justify-between gap-3">
+                          <div>
+                            <h3 className="font-semibold">{match.college_name}</h3>
+                            <p className="text-sm text-muted-foreground">
+                              {match.location ?? "Location unavailable"}
+                            </p>
+                            <div className="mt-2 flex flex-wrap gap-2 text-xs text-muted-foreground">
+                              {match.ranking ? (
+                                <span className="rounded-full border px-2 py-0.5">
+                                  Ranking #{match.ranking}
+                                </span>
+                              ) : null}
+                              {match.average_cost ? (
+                                <span className="rounded-full border px-2 py-0.5">
+                                  Avg. Cost ${Math.round(match.average_cost).toLocaleString()}
+                                </span>
+                              ) : null}
+                              {typeof match.acceptance_rate === "number" ? (
+                                <span className="rounded-full border px-2 py-0.5">
+                                  Acceptance {match.acceptance_rate.toFixed(1)}%
+                                </span>
+                              ) : null}
+                            </div>
+                          </div>
+                          <div className="text-right">
+                            <Badge variant="secondary" className="text-base px-3 py-1">
+                              {match.score.toFixed(1)}% Match
+                            </Badge>
+                            {typeof match.heuristic_score === "number" &&
+                            Math.abs(match.heuristic_score - match.score) >= 0.1 ? (
+                              <p className="mt-1 text-xs text-muted-foreground">
+                                Heuristic: {match.heuristic_score.toFixed(1)}%
+                              </p>
+                            ) : null}
+                          </div>
                         </div>
-                        <Badge variant="secondary">{match.score.toFixed(1)}% Match</Badge>
+                        {match.notes?.length ? (
+                          <div className="space-y-1">
+                            {match.notes.slice(0, 3).map((note, idx) => (
+                              <p key={idx} className="text-xs text-muted-foreground leading-relaxed">
+                                • {note}
+                              </p>
+                            ))}
+                          </div>
+                        ) : null}
                       </div>
                     </Card>
                   ))

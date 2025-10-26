@@ -8,6 +8,8 @@ import { CollegeCard } from '@/components/CollegeCard';
 import { CompareDialog } from '@/components/CompareDialog';
 import { College } from "@/types/college";
 import { useCollegeSelection } from "@/hooks/useCollegeSelection";
+import { useAuth } from "@/hooks/useAuth";
+import { useToast } from "@/hooks/use-toast";
 import { GripVertical } from "lucide-react";
 import {
   DndContext,
@@ -105,6 +107,8 @@ export default function CollegeList() {
   const [colleges, setColleges] = useState<College[]>([]);
   const [loading, setLoading] = useState(true);
   const [isOrganizeMode, setIsOrganizeMode] = useState(false);
+  const { user, isAuthenticating } = useAuth();
+  const { toast } = useToast();
 
   const {
     selectedColleges,
@@ -127,33 +131,110 @@ export default function CollegeList() {
   );
 
   useEffect(() => {
-    async function fetchColleges() {
-      console.log('Fetching colleges from Supabase...');
-      
+    let isMounted = true;
+
+    const hydrateProgram = (program: any) => ({
+      ...program,
+      id: String(program.id),
+      college_id: String(program.college_id),
+    });
+
+    const fetchColleges = async () => {
+      if (!user) {
+        if (isMounted) {
+          setColleges([]);
+          setLoading(false);
+        }
+        return;
+      }
+
+      setLoading(true);
+
       const { data, error } = await supabase
-        .from('colleges')
+        .from("saved_colleges")
         .select(`
-          *,
-          programs (*)
+          match_score,
+          colleges:college_id (
+            *,
+            programs (*)
+          )
         `)
-        .order('ranking', { ascending: true });
-      
+        .eq("user_id", user.id)
+        .order("created_at", { ascending: true });
+
+      if (!isMounted) {
+        return;
+      }
+
       if (error) {
-        console.error('Error fetching colleges:', error);
+        console.error("Error fetching saved colleges:", error);
+        toast({
+          title: "Unable to load list",
+          description: "We couldn't load your saved colleges. Please try again.",
+          variant: "destructive",
+        });
+        setColleges([]);
         setLoading(false);
         return;
       }
-      
-      console.log('Fetched colleges:', data);
-      setColleges(data || []);
+
+      const normalized =
+        data?.map((entry) => {
+          const college = entry.colleges;
+          if (!college) {
+            return null;
+          }
+
+          const programs = Array.isArray(college.programs)
+            ? college.programs.map(hydrateProgram)
+            : [];
+
+          return {
+            ...college,
+            id: String(college.id),
+            average_cost: Number(college.average_cost ?? 0),
+            acceptance_rate: Number(college.acceptance_rate ?? 0),
+            grad_rate: Number(college.grad_rate ?? 0),
+            median_salary: Number(college.median_salary ?? 0),
+            size: Number(college.size ?? 0),
+            ranking: Number(college.ranking ?? 0),
+            matchScore: typeof entry.match_score === "number" ? Number(entry.match_score) : undefined,
+            programs,
+          } as College;
+        })
+          .filter((college): college is College => Boolean(college)) ?? [];
+
+      setColleges(normalized);
       setLoading(false);
+    };
+
+    void fetchColleges();
+
+    return () => {
+      isMounted = false;
+    };
+  }, [user, toast]);
+
+  const handleRemove = async (id: string) => {
+    setColleges((prev) => prev.filter((c) => c.id !== id));
+    if (!user) {
+      return;
     }
 
-    fetchColleges();
-  }, []);
+    const { error } = await supabase
+      .from("saved_colleges")
+      .delete()
+      .eq("user_id", user.id)
+      .eq("college_id", Number(id));
 
-  const handleRemove = (id: string) => {
-    setColleges(colleges.filter((c) => c.id !== id));
+    if (error) {
+      console.error("Failed to remove college", error);
+      toast({
+        title: "Remove failed",
+        description: "We couldn't remove that college. Please refresh and try again.",
+        variant: "destructive",
+      });
+    }
   };
 
   const handleDragEnd = (event: DragEndEvent) => {
@@ -169,6 +250,9 @@ export default function CollegeList() {
   };
 
   const calculateMatchScore = (college: College) => {
+    if (typeof college.matchScore === "number") {
+      return Math.round(college.matchScore);
+    }
     const acceptanceScore = (100 - college.acceptance_rate) * 0.4;
     const costScore = Math.max(0, 100 - (college.average_cost / 1000)) * 0.3;
     const gradScore = college.grad_rate * 0.3;
@@ -183,13 +267,13 @@ export default function CollegeList() {
     ? colleges.reduce((sum, c) => sum + calculateMatchScore(c), 0) / colleges.length
     : 0;
 
-  if (loading) {
+  if (loading || isAuthenticating) {
     return (
       <div className="min-h-screen bg-background">
         <Navbar />
         <main className="container mx-auto px-4 py-8">
           <div className="text-center py-12">
-            <p className="text-muted-foreground">Loading colleges...</p>
+            <p className="text-muted-foreground">Loading your saved colleges...</p>
           </div>
         </main>
       </div>
@@ -204,9 +288,11 @@ export default function CollegeList() {
         <div className="mb-8">
           <h1 className="text-3xl font-bold mb-2">My College List</h1>
           <p className="text-muted-foreground">
-            {isOrganizeMode 
-              ? "Drag cards to reorder and click Remove to delete colleges" 
-              : "Organize and prioritize your college choices"
+            {!user
+              ? "Sign in to save colleges from the search page and build your personalized list."
+              : isOrganizeMode
+                ? "Drag cards to reorder and click Remove to delete colleges."
+                : "Organize and prioritize the colleges you have saved."
             }
           </p>
         </div>
@@ -217,9 +303,14 @@ export default function CollegeList() {
             {colleges.length === 0 ? (
               <Card className="p-12 text-center">
                 <p className="text-muted-foreground mb-4">
-                  No colleges found in database. Add some colleges to get started!
+                  {user
+                    ? "You haven't saved any colleges yet. Browse the catalog to build your list."
+                    : "No saved colleges to show. Sign in and add schools from the search page."
+                  }
                 </p>
-                <Button variant="hero">Browse Colleges</Button>
+                <Button variant="hero" asChild>
+                  <a href="/search">Browse Colleges</a>
+                </Button>
               </Card>
             ) : (
               <DndContext
