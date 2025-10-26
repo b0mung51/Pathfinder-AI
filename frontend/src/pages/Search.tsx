@@ -9,31 +9,26 @@ import { Badge } from "@/components/ui/badge";
 import { Search as SearchIcon, SlidersHorizontal } from "lucide-react";
 import { supabase } from "@/lib/supabaseClient";
 import { College, Program } from "@/types/college";
+import { useCollegeSelection } from "@/hooks/useCollegeSelection"; 
 
 export default function Search() {
-  const [selectedColleges, setSelectedColleges] = useState<string[]>([]);
+  // Remove this line - using hook version instead
+  // const [selectedColleges, setSelectedColleges] = useState<string[]>([]);
+  
   const [colleges, setColleges] = useState<College[]>([]);
   const [searchQuery, setSearchQuery] = useState("");
   const [error, setError] = useState<string | null>(null);
   const [loading, setLoading] = useState(false);
-  const [compareDialogOpen, setCompareDialogOpen] = useState(false);
-
-  const handleSelect = (id: string) => {
-    setSelectedColleges((prev) =>
-      prev.includes(id)
-        ? prev.filter((cid) => cid !== id)
-        : [...prev, id]
-    );
-  };
-
-  const handleRemoveFromCompare = (id: string) => {
-    setSelectedColleges((prev) => prev.filter((cid) => cid !== id));
-  };
-
-  const getSelectedColleges = () => {
-    return colleges.filter((c) => selectedColleges.includes(c.id));
-  };
   
+  const {
+    selectedColleges, // Add this - it was missing!
+    compareDialogOpen,
+    handleSelect,
+    handleRemoveFromCompare,
+    getSelectedColleges,
+    setCompareDialogOpen,
+  } = useCollegeSelection();
+
   const calculateMatchScore = (college: College) => {
     const acceptanceScore = (100 - college.acceptance_rate) * 0.4;
     const costScore = Math.max(0, 100 - (college.average_cost / 1000)) * 0.3;
@@ -185,7 +180,7 @@ export default function Search() {
                       ranking={college.ranking}
                       url={college.url}
                       gradRate={college.grad_rate}
-                      averageCost={`$${college.average_cost.toLocaleString()}`}
+                      averageCost={college.average_cost}
                       acceptanceRate={college.acceptance_rate}
                       medianSalary={college.median_salary}
                       size={college.size}
@@ -246,9 +241,9 @@ export default function Search() {
                     Compare ({selectedColleges.length})
                   </Button>
                   <Button
-                    variant="hero"
-                    className="w-full mt-4"
-                    disabled={selectedColleges.length == 0}
+                    variant="outline"
+                    className="w-full"
+                    disabled={selectedColleges.length === 0}
                   >
                     Save ({selectedColleges.length})
                   </Button>
@@ -263,7 +258,7 @@ export default function Search() {
       <CompareDialog
         open={compareDialogOpen}
         onOpenChange={setCompareDialogOpen}
-        colleges={getSelectedColleges()}
+        colleges={getSelectedColleges(colleges)}
         onRemoveCollege={handleRemoveFromCompare}
       />
     </div>
