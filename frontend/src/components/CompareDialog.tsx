@@ -106,7 +106,7 @@ export function CompareDialog({
                         <span>Ranking: #{college.ranking}</span>
                       </div>
                     </div>
-
+                    
                     {/* Description */}
                     {description && (
                       <div>
