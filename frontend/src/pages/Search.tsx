@@ -9,19 +9,16 @@ import { Badge } from "@/components/ui/badge";
 import { Search as SearchIcon, SlidersHorizontal } from "lucide-react";
 import { supabase } from "@/lib/supabaseClient";
 import { College, Program } from "@/types/college";
-import { useCollegeSelection } from "@/hooks/useCollegeSelection"; 
+import { useCollegeSelection } from "@/hooks/useCollegeSelection";
 
 export default function Search() {
-  // Remove this line - using hook version instead
-  // const [selectedColleges, setSelectedColleges] = useState<string[]>([]);
-  
   const [colleges, setColleges] = useState<College[]>([]);
   const [searchQuery, setSearchQuery] = useState("");
   const [error, setError] = useState<string | null>(null);
   const [loading, setLoading] = useState(false);
-  
+
   const {
-    selectedColleges, // Add this - it was missing!
+    selectedColleges,
     compareDialogOpen,
     handleSelect,
     handleRemoveFromCompare,
@@ -184,7 +181,7 @@ export default function Search() {
                       acceptanceRate={college.acceptance_rate}
                       medianSalary={college.median_salary}
                       size={college.size}
-                      majors={college.programs?.[0]?.field_of_study || 'Not specified'}
+                      majors={college.programs?.map(p => p.field_of_study).join(', ') || 'Not specified'}
                       matchScore={college.matchScore || 75}
                       description={description}
                       programs={programNames}
@@ -218,6 +215,9 @@ export default function Search() {
                         <div className="flex items-center justify-between gap-2">
                           <div className="flex-1 min-w-0">
                             <p className="font-medium text-sm truncate">{college.name}</p>
+                            <Badge variant="secondary" className="mt-1">
+                              {college.matchScore}%
+                            </Badge>
                           </div>
                           <Button
                             variant="ghost"

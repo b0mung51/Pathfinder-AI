@@ -86,15 +86,15 @@ function SortableCollegeCard({
           acceptanceRate={college.acceptance_rate}
           medianSalary={college.median_salary}
           size={college.size}
-          major={college.programs?.[0]?.field_of_study || 'Not specified'}
+          majors={college.programs?.map(p => p.field_of_study).join(', ') || 'Not specified'}
           matchScore={matchScore}
           description={description}
           programs={programNames}
           timeline={timeline}
           fit={fit}
           selected={selected}
-          onSelect={isOrganizeMode ? undefined : onSelect} // Disable select in organize mode
-          onRemove={isOrganizeMode ? onRemove : undefined} // Enable remove only in organize mode
+          onSelect={isOrganizeMode ? undefined : onSelect}
+          onRemove={isOrganizeMode ? onRemove : undefined}
         />
       </div>
     </div>
@@ -118,7 +118,7 @@ export default function CollegeList() {
   const sensors = useSensors(
     useSensor(PointerSensor, {
       activationConstraint: {
-        distance: 8, // Require 8px of movement before dragging starts
+        distance: 8,
       },
     }),
     useSensor(KeyboardSensor, {
@@ -267,6 +267,7 @@ export default function CollegeList() {
               </DndContext>
             )}
           </div>
+
           {/* Sidebar Stats */}
           <div className="lg:col-span-1">
             <Card className="p-4 sticky top-20 space-y-6">
@@ -302,6 +303,9 @@ export default function CollegeList() {
                             <div className="flex items-center justify-between gap-2">
                               <div className="flex-1 min-w-0">
                                 <p className="font-medium text-sm truncate">{college.name}</p>
+                                <Badge variant="secondary" className="mt-1">
+                                  {calculateMatchScore(college)}%
+                                </Badge>
                               </div>
                               <Button
                                 variant="ghost"
