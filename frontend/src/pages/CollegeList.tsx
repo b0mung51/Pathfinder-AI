@@ -1,75 +1,200 @@
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { Navbar } from "@/components/Navbar";
 import { Card } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
-import { GripVertical, Trash2, BarChart3 } from "lucide-react";
+import { supabase } from '@/lib/supabaseClient';
+import { CollegeCard } from '@/components/CollegeCard';
+import { CompareDialog } from '@/components/CompareDialog';
+import { College } from "@/types/college";
+import { useCollegeSelection } from "@/hooks/useCollegeSelection";
+import { GripVertical } from "lucide-react";
+import {
+  DndContext,
+  closestCenter,
+  KeyboardSensor,
+  PointerSensor,
+  useSensor,
+  useSensors,
+  DragEndEvent,
+} from '@dnd-kit/core';
+import {
+  arrayMove,
+  SortableContext,
+  sortableKeyboardCoordinates,
+  useSortable,
+  verticalListSortingStrategy,
+} from '@dnd-kit/sortable';
+import { CSS } from '@dnd-kit/utilities';
 
-interface RankedCollege {
-  id: string;
-  rank: number;
-  name: string;
-  location: string;
-  cost: string;
+// Sortable College Card Wrapper
+function SortableCollegeCard({ 
+  college, 
+  matchScore, 
+  programNames, 
+  description, 
+  timeline, 
+  fit,
+  selected,
+  onSelect,
+  onRemove,
+  isOrganizeMode,
+}: {
+  college: College;
   matchScore: number;
-  major: string;
+  programNames: string[];
+  description: string;
+  timeline: string[];
+  fit?: string;
+  selected: boolean;
+  onSelect: (id: string) => void;
+  onRemove: (id: string) => void;
+  isOrganizeMode: boolean;
+}) {
+  const {
+    attributes,
+    listeners,
+    setNodeRef,
+    transform,
+    transition,
+    isDragging,
+  } = useSortable({ id: college.id });
+
+  const style = {
+    transform: CSS.Transform.toString(transform),
+    transition,
+    opacity: isDragging ? 0.5 : 1,
+  };
+
+  return (
+    <div ref={setNodeRef} style={style} className="relative">
+      {/* Show grip icon only in organize mode */}
+      {isOrganizeMode && (
+        <div className="absolute left-2 top-1/2 -translate-y-1/2 z-10 cursor-grab active:cursor-grabbing" {...attributes} {...listeners}>
+          <GripVertical className="h-5 w-5 text-muted-foreground" />
+        </div>
+      )}
+      <div className={isOrganizeMode ? "pl-8" : ""}>
+        <CollegeCard
+          id={college.id}
+          name={college.name}
+          location={college.location}
+          ranking={college.ranking}
+          url={college.url}
+          gradRate={college.grad_rate}
+          averageCost={college.average_cost}
+          acceptanceRate={college.acceptance_rate}
+          medianSalary={college.median_salary}
+          size={college.size}
+          majors={college.programs?.map(p => p.field_of_study).join(', ') || 'Not specified'}
+          matchScore={matchScore}
+          description={description}
+          programs={programNames}
+          timeline={timeline}
+          fit={fit}
+          selected={selected}
+          onSelect={isOrganizeMode ? undefined : onSelect}
+          onRemove={isOrganizeMode ? onRemove : undefined}
+        />
+      </div>
+    </div>
+  );
 }
 
-const initialColleges: RankedCollege[] = [
-  {
-    id: "1",
-    rank: 1,
-    name: "Stanford University",
-    location: "Stanford, CA",
-    cost: "$55k/year",
-    matchScore: 85,
-    major: "Computer Science",
-  },
-  {
-    id: "2",
-    rank: 2,
-    name: "MIT",
-    location: "Cambridge, MA",
-    cost: "$53k/year",
-    matchScore: 82,
-    major: "Engineering",
-  },
-  {
-    id: "3",
-    rank: 3,
-    name: "UC Berkeley",
-    location: "Berkeley, CA",
-    cost: "$43k/year",
-    matchScore: 80,
-    major: "Computer Science",
-  },
-  {
-    id: "4",
-    rank: 4,
-    name: "Carnegie Mellon",
-    location: "Pittsburgh, PA",
-    cost: "$58k/year",
-    matchScore: 78,
-    major: "Computer Science",
-  },
-];
-
 export default function CollegeList() {
-  const [colleges, setColleges] = useState<RankedCollege[]>(initialColleges);
-  const [selectedForCompare, setSelectedForCompare] = useState<string[]>([]);
+  const [colleges, setColleges] = useState<College[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [isOrganizeMode, setIsOrganizeMode] = useState(false);
+
+  const {
+    selectedColleges,
+    compareDialogOpen,
+    handleSelect,
+    handleRemoveFromCompare,
+    getSelectedColleges,
+    setCompareDialogOpen,
+  } = useCollegeSelection();
+
+  const sensors = useSensors(
+    useSensor(PointerSensor, {
+      activationConstraint: {
+        distance: 8,
+      },
+    }),
+    useSensor(KeyboardSensor, {
+      coordinateGetter: sortableKeyboardCoordinates,
+    })
+  );
+
+  useEffect(() => {
+    async function fetchColleges() {
+      console.log('Fetching colleges from Supabase...');
+      
+      const { data, error } = await supabase
+        .from('colleges')
+        .select(`
+          *,
+          programs (*)
+        `)
+        .order('ranking', { ascending: true });
+      
+      if (error) {
+        console.error('Error fetching colleges:', error);
+        setLoading(false);
+        return;
+      }
+      
+      console.log('Fetched colleges:', data);
+      setColleges(data || []);
+      setLoading(false);
+    }
+
+    fetchColleges();
+  }, []);
 
   const handleRemove = (id: string) => {
-    setColleges(colleges.filter((c) => c.id !== id).map((c, idx) => ({ ...c, rank: idx + 1 })));
+    setColleges(colleges.filter((c) => c.id !== id));
   };
 
-  const toggleCompareSelection = (id: string) => {
-    setSelectedForCompare((prev) =>
-      prev.includes(id) ? prev.filter((cid) => cid !== id) : [...prev, id]
+  const handleDragEnd = (event: DragEndEvent) => {
+    const { active, over } = event;
+
+    if (over && active.id !== over.id) {
+      setColleges((items) => {
+        const oldIndex = items.findIndex((item) => item.id === active.id);
+        const newIndex = items.findIndex((item) => item.id === over.id);
+        return arrayMove(items, oldIndex, newIndex);
+      });
+    }
+  };
+
+  const calculateMatchScore = (college: College) => {
+    const acceptanceScore = (100 - college.acceptance_rate) * 0.4;
+    const costScore = Math.max(0, 100 - (college.average_cost / 1000)) * 0.3;
+    const gradScore = college.grad_rate * 0.3;
+    return Math.round(acceptanceScore + costScore + gradScore);
+  };
+
+  const avgCost = colleges.length > 0 
+    ? colleges.reduce((sum, c) => sum + c.average_cost, 0) / colleges.length 
+    : 0;
+
+  const avgMatch = colleges.length > 0
+    ? colleges.reduce((sum, c) => sum + calculateMatchScore(c), 0) / colleges.length
+    : 0;
+
+  if (loading) {
+    return (
+      <div className="min-h-screen bg-background">
+        <Navbar />
+        <main className="container mx-auto px-4 py-8">
+          <div className="text-center py-12">
+            <p className="text-muted-foreground">Loading colleges...</p>
+          </div>
+        </main>
+      </div>
     );
-  };
-
-  const avgCost = colleges.reduce((sum, c) => sum + parseInt(c.cost.replace(/[^0-9]/g, "")), 0) / colleges.length;
-  const avgMatch = colleges.reduce((sum, c) => sum + c.matchScore, 0) / colleges.length;
+  }
 
   return (
     <div className="min-h-screen bg-background">
@@ -79,7 +204,10 @@ export default function CollegeList() {
         <div className="mb-8">
           <h1 className="text-3xl font-bold mb-2">My College List</h1>
           <p className="text-muted-foreground">
-            Organize and prioritize your college choices
+            {isOrganizeMode 
+              ? "Drag cards to reorder and click Remove to delete colleges" 
+              : "Organize and prioritize your college choices"
+            }
           </p>
         </div>
 
@@ -89,63 +217,54 @@ export default function CollegeList() {
             {colleges.length === 0 ? (
               <Card className="p-12 text-center">
                 <p className="text-muted-foreground mb-4">
-                  Your college list is empty. Add colleges from the search page!
+                  No colleges found in database. Add some colleges to get started!
                 </p>
                 <Button variant="hero">Browse Colleges</Button>
               </Card>
             ) : (
-              colleges.map((college) => (
-                <Card
-                  key={college.id}
-                  className={`p-6 transition-smooth hover:shadow-card-hover ${
-                    selectedForCompare.includes(college.id) ? "ring-2 ring-primary" : ""
-                  }`}
+              <DndContext
+                sensors={sensors}
+                collisionDetection={closestCenter}
+                onDragEnd={handleDragEnd}
+              >
+                <SortableContext
+                  items={colleges.map(c => c.id)}
+                  strategy={verticalListSortingStrategy}
                 >
-                  <div className="flex items-start gap-4">
-                    {/* Drag Handle */}
-                    <div className="cursor-grab active:cursor-grabbing pt-2">
-                      <GripVertical className="h-5 w-5 text-muted-foreground" />
-                    </div>
+                  {colleges.map((college) => {
+                    const programNames = college.programs?.map(p => p.name) || [];
+                    const description = college.programs?.[0]?.description || '';
+                    const matchScore = calculateMatchScore(college);
+                    
+                    const timeline = [
+                      "Year 1: Complete general education requirements and explore majors",
+                      "Year 2: Declare major and begin core coursework",
+                      "Year 3: Apply for internships and research opportunities",
+                      "Year 4: Complete capstone project and prepare for career/graduate school"
+                    ];
+                    
+                    const fit = college.programs?.[0]?.notable_features 
+                      ? `Strong programs in ${college.programs[0].field_of_study}. ${college.programs[0].notable_features}`
+                      : undefined;
 
-                    {/* Rank Badge */}
-                    <div className="flex items-center justify-center w-10 h-10 rounded-full bg-primary text-primary-foreground font-bold shrink-0">
-                      #{college.rank}
-                    </div>
-
-                    {/* College Info */}
-                    <div className="flex-1 min-w-0">
-                      <h3 className="text-lg font-semibold mb-1">{college.name}</h3>
-                      <p className="text-sm text-muted-foreground mb-3">{college.major}</p>
-                      
-                      <div className="flex flex-wrap gap-4 text-sm">
-                        <span className="text-muted-foreground">{college.location}</span>
-                        <span className="text-muted-foreground">{college.cost}</span>
-                        <Badge variant="secondary">{college.matchScore}% Match</Badge>
-                      </div>
-                    </div>
-
-                    {/* Actions */}
-                    <div className="flex gap-2">
-                      <Button
-                        variant="outline"
-                        size="icon"
-                        onClick={() => toggleCompareSelection(college.id)}
-                        className={selectedForCompare.includes(college.id) ? "bg-secondary" : ""}
-                      >
-                        <BarChart3 className="h-4 w-4" />
-                      </Button>
-                      <Button
-                        variant="ghost"
-                        size="icon"
-                        onClick={() => handleRemove(college.id)}
-                        className="text-destructive hover:text-destructive hover:bg-destructive/10"
-                      >
-                        <Trash2 className="h-4 w-4" />
-                      </Button>
-                    </div>
-                  </div>
-                </Card>
-              ))
+                    return (
+                      <SortableCollegeCard
+                        key={college.id}
+                        college={college}
+                        matchScore={matchScore}
+                        programNames={programNames}
+                        description={description}
+                        timeline={timeline}
+                        fit={fit}
+                        selected={selectedColleges.includes(college.id)}
+                        onSelect={handleSelect}
+                        onRemove={handleRemove}
+                        isOrganizeMode={isOrganizeMode}
+                      />
+                    );
+                  })}
+                </SortableContext>
+              </DndContext>
             )}
           </div>
 
@@ -170,38 +289,79 @@ export default function CollegeList() {
                 </div>
               </div>
 
-              <div className="pt-4 border-t">
-                <Button
-                  variant="hero"
-                  className="w-full mb-2"
-                  disabled={selectedForCompare.length < 2}
-                >
-                  Compare Selected ({selectedForCompare.length})
-                </Button>
-                <Button variant="outline" className="w-full">
-                  Export List
-                </Button>
-              </div>
-
-              {selectedForCompare.length > 0 && (
-                <div className="pt-4 border-t">
-                  <p className="text-xs text-muted-foreground mb-2">Selected for comparison:</p>
-                  <div className="space-y-1">
-                    {selectedForCompare.map((id) => {
-                      const college = colleges.find((c) => c.id === id);
-                      return (
-                        <Badge key={id} variant="secondary" className="text-xs">
-                          {college?.name}
-                        </Badge>
-                      );
-                    })}
+              {/* Only show selection features when NOT in organize mode */}
+              {!isOrganizeMode && selectedColleges.length > 0 && (
+                <>
+                  <div className="pt-4 border-t">
+                    <p className="text-xs text-muted-foreground mb-2">Selected for comparison:</p>
+                    <div className="space-y-3">
+                      {selectedColleges.map((id) => {
+                        const college = colleges.find((c) => c.id === id);
+                        if (!college) return null;
+                        return (
+                          <Card key={id} className="p-3">
+                            <div className="flex items-center justify-between gap-2">
+                              <div className="flex-1 min-w-0">
+                                <p className="font-medium text-sm truncate">{college.name}</p>
+                                <Badge variant="secondary" className="mt-1">
+                                  {calculateMatchScore(college)}%
+                                </Badge>
+                              </div>
+                              <Button
+                                variant="ghost"
+                                size="sm"
+                                onClick={() => handleSelect(id)}
+                                className="text-destructive hover:text-destructive h-8 px-2"
+                              >
+                                ✕
+                              </Button>
+                            </div>
+                          </Card>
+                        );
+                      })}
+                    </div>
                   </div>
+
+                  <div className="pt-4 border-t">
+                    <Button
+                      variant="hero"
+                      className="w-full mb-2"
+                      disabled={selectedColleges.length < 2}
+                      onClick={() => setCompareDialogOpen(true)}
+                    >
+                      Compare Selected ({selectedColleges.length})
+                    </Button>
+                    <Button variant="outline" className="w-full">
+                      Export List
+                    </Button>
+                  </div>
+                </>
+              )}
+
+              {/* Organize button - always at the bottom */}
+              {colleges.length > 0 && (
+                <div className="pt-4 border-t">
+                  <Button
+                    variant={isOrganizeMode ? "destructive" : "outline"}
+                    onClick={() => setIsOrganizeMode(!isOrganizeMode)}
+                    className="w-full"
+                  >
+                    {isOrganizeMode ? "Done Organizing" : "Organize"}
+                  </Button>
                 </div>
               )}
             </Card>
           </div>
         </div>
       </main>
+
+      {/* Compare Dialog */}
+      <CompareDialog
+        open={compareDialogOpen}
+        onOpenChange={setCompareDialogOpen}
+        colleges={getSelectedColleges(colleges)}
+        onRemoveCollege={handleRemoveFromCompare}
+      />
     </div>
   );
 }

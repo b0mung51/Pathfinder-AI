@@ -13,6 +13,7 @@ import {
   DialogFooter,
   DialogClose,
 } from "@/components/ui/dialog";
+import { College, Program } from "@/types/college";
 
 interface CollegeCardProps {
   id: string;
@@ -21,11 +22,11 @@ interface CollegeCardProps {
   ranking: number;
   url: string;
   gradRate: number;
-  averageCost: string;
+  averageCost: number;
   acceptanceRate: number;
   medianSalary: number;
   size: number;
-  major: string;
+  majors: string;
   matchScore: number;
   // Optional extended details for the modal
   description?: string;
@@ -49,7 +50,7 @@ export function CollegeCard({
   acceptanceRate,
   medianSalary,
   size,
-  major,
+  majors,
   matchScore,
   description,
   programs,
@@ -57,7 +58,7 @@ export function CollegeCard({
   fit,
   selected,
   onSelect,
-  onRemove,
+  //onRemove,
   className,
 }: CollegeCardProps) {
   const getMatchColor = (score: number) => {
@@ -82,7 +83,7 @@ export function CollegeCard({
           {/* College and Major Title */}
           <div>
             <h3 className="text-lg font-semibold mb-1">{name}</h3>
-            <p className="text-sm text-muted-foreground">{major}</p>
+            <p className="text-sm text-muted-foreground">{majors}</p>
           </div>
 
           {/* Location Title */}
@@ -124,20 +125,26 @@ export function CollegeCard({
             <Button
               size="sm"
               variant={selected ? "destructive" : "default"}
-              onClick={() => onSelect(id)}
+              onClick={(e) => {
+                e.stopPropagation(); // Prevent card click event
+                if (onSelect) onSelect(id);
+              }}
             >
               {selected ? "Unselect" : "Select"}
             </Button>
           )}
-          {onRemove && (
+          {/* {onRemove && (
             <Button
               size="sm"
               variant="destructive"
-              onClick={() => onRemove(id)}
+              onClick={(e) => {
+                e.stopPropagation(); // Prevent card click event
+                if (onRemove) onRemove(id);
+              }}
             >
               Remove
             </Button>
-          )}
+          )} */}
         </div>
       </div>
     </Card>
@@ -146,10 +153,11 @@ export function CollegeCard({
         <DialogContent 
           className="max-w-6xl overflow-auto"
           style={{maxHeight: '90vh'}}
-          >
+          onOpenAutoFocus={(e) => e.preventDefault()}
+        >
           <DialogHeader>
             <DialogTitle>{name}</DialogTitle>
-            <DialogDescription>
+            <DialogDescription asChild>
               <div className="flex items-center gap-4 text-sm text-muted-foreground">
                 <span>{location}</span>
                 <span>•</span>
@@ -165,66 +173,55 @@ export function CollegeCard({
 
             <div className="grid grid-cols-2 gap-4">
               <div>
+                {/* Programs */}
                 <h4 className="text-sm font-semibold mb-2">Top Programs</h4>
-                {programs && programs.length > 0 ? (
-                  <ul className="list-disc list-inside text-sm">
-                    {programs.map((p) => (
-                      <li key={p}>{p}</li>
-                    ))}
-                  </ul>
+                {/* If programs exist, show all programs */}
+                {majors && majors.length > 0 ? (
+                  <div className="list-disc list-inside text-sm">
+                    <span>{majors}</span>
+                  </div>
                 ) : (
+                  // Message if no programs exist
                   <p className="text-sm text-muted-foreground">No program data available.</p>
                 )}
               </div>
 
+              {/* College Specifics */}
               <div>
                 <h4 className="text-sm font-semibold mb-2">Fit & Stats</h4>
                 <div className="text-sm text-muted-foreground space-y-1">
                   <div>Match: <span className={cn("font-semibold", getMatchColor(matchScore))}>{matchScore}%</span></div>
                   <div>Graduation Rate: {gradRate}%</div>
-                  <div>Median Salary: ${medianSalary.toLocaleString()}</div>
+                  <div>Median Salary: ${medianSalary}</div>
                   <div>Ranking: #{ranking}</div>
                   {fit && <div>Fit: {fit}</div>}
                 </div>
               </div>
             </div>
 
+            {/* Timeline */}
             <div>
               <h4 className="text-sm font-semibold mb-2">Suggested Timeline</h4>
               {timeline && timeline.length > 0 ? (
-                <ol className="list-decimal list-inside text-sm">
+                <div className="list-decimal list-inside text-sm">
+                  {/* List of steps for the timeline */}
                   {timeline.map((t, i) => (
-                    <li key={i}>{t}</li>
+                    <p key={i}>{t}</p>
                   ))}
-                </ol>
+                </div>
               ) : (
                 <p className="text-sm text-muted-foreground">No timeline provided.</p>
               )}
             </div>
           </div>
-
           <DialogFooter>
             <div className="flex items-center gap-2 w-full justify-between">
               <a href={url} target="_blank" rel="noreferrer" className="text-sm underline">
                 View official site
               </a>
-              <div className="flex gap-2">
-                <Button
-                  variant="default"
-                  onClick={() => {
-                    // keep the dialog open if user wants to select from modal
-                    if (onSelect) onSelect(id);
-                  }}
-                >
-                  Select
-                </Button>
-                <DialogClose asChild>
-                  <Button variant="ghost">Close</Button>
-                </DialogClose>
-              </div>
             </div>
           </DialogFooter>
-        </DialogContent>
+          </DialogContent>
       </Dialog>
     </>
   );
