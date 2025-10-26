@@ -10,6 +10,7 @@ import { Search as SearchIcon, SlidersHorizontal } from "lucide-react";
 import { supabase } from "@/lib/supabaseClient";
 import { College, Program } from "@/types/college";
 import { useCollegeSelection } from "@/hooks/useCollegeSelection"; 
+import { FiltersDialog, FilterValues } from "@/components/FiltersDialog";
 
 export default function Search() {
   // Remove this line - using hook version instead
@@ -19,7 +20,6 @@ export default function Search() {
   const [searchQuery, setSearchQuery] = useState("");
   const [error, setError] = useState<string | null>(null);
   const [loading, setLoading] = useState(false);
-  
   const {
     selectedColleges, // Add this - it was missing!
     compareDialogOpen,
@@ -28,6 +28,62 @@ export default function Search() {
     getSelectedColleges,
     setCompareDialogOpen,
   } = useCollegeSelection();
+  const [filtersOpen, setFiltersOpen] = useState(false);
+  const [filters, setFilters] = useState<FilterValues>({
+    maxCost: 100000,
+    minAcceptanceRate: 0,
+    maxAcceptanceRate: 100,
+    minGradRate: 0,
+    location: "",
+    minSize: 0,
+    maxSize: 100000,
+  });
+    // Add filter function
+  const applyFiltersToColleges = (colleges: College[]) => {
+    return colleges.filter((college) => {
+      // Cost filter
+      if (college.average_cost > filters.maxCost) return false;
+      
+      // Acceptance rate filter
+      if (
+        college.acceptance_rate < filters.minAcceptanceRate ||
+        college.acceptance_rate > filters.maxAcceptanceRate
+      )
+        return false;
+      
+      // Graduation rate filter
+      if (college.grad_rate < filters.minGradRate) return false;
+      
+      // Location filter
+      if (
+        filters.location &&
+        !college.location.toLowerCase().includes(filters.location.toLowerCase())
+      )
+        return false;
+      
+      // Size filter
+      if (college.size < filters.minSize || college.size > filters.maxSize)
+        return false;
+      
+      return true;
+    });
+  };
+
+  const handleApplyFilters = (newFilters: FilterValues) => {
+    setFilters(newFilters);
+  };
+
+  const handleResetFilters = () => {
+    setFilters({
+      maxCost: 100000,
+      minAcceptanceRate: 0,
+      maxAcceptanceRate: 100,
+      minGradRate: 0,
+      location: "",
+      minSize: 0,
+      maxSize: 100000,
+    });
+  };
 
   const calculateMatchScore = (college: College) => {
     const acceptanceScore = (100 - college.acceptance_rate) * 0.4;
@@ -138,64 +194,68 @@ export default function Search() {
                     className="pl-9"
                   />
                 </div>
-                <Button variant="outline">
-                  <SlidersHorizontal className="h-4 w-4 mr-2" />
-                  Filters
-                </Button>
+                  <Button variant="outline" onClick={() => setFiltersOpen(true)}>
+                    <SlidersHorizontal className="h-4 w-4 mr-2" />
+                    Filters
+                  </Button>
               </div>
             </Card>
 
-            {/* Results */}
+            {/*Results*/}
             <div className="space-y-4">
               {loading ? (
                 <p className="text-muted-foreground text-center py-8">Searching...</p>
               ) : error ? (
                 <p className="text-muted-foreground text-center py-8">{error}</p>
-              ) : colleges.length === 0 ? (
-                <p className="text-muted-foreground text-center py-8">
-                  No colleges found. Try a different search term.
-                </p>
-              ) : (
-                colleges.map((college) => {
-                  const programNames = college.programs?.map(p => p.name) || [];
-                  const description = college.programs?.[0]?.description || '';
-                  
-                  const timeline = [
-                    "Year 1: Complete general education requirements and explore majors",
-                    "Year 2: Declare major and begin core coursework",
-                    "Year 3: Apply for internships and research opportunities",
-                    "Year 4: Complete capstone project and prepare for career/graduate school"
-                  ];
-                  
-                  const fit = college.programs?.[0]?.notable_features 
-                    ? `Strong programs in ${college.programs[0].field_of_study}. ${college.programs[0].notable_features}`
-                    : undefined;
+              ) : (() => {
+                  const filteredColleges = applyFiltersToColleges(colleges);
+                  return filteredColleges.length === 0 ? (
+                    <p className="text-muted-foreground text-center py-8">
+                      No colleges match your filters. Try adjusting your criteria.
+                    </p>
+                  ) : (
+                    filteredColleges.map((college) => {
+                      const programNames = college.programs?.map(p => p.name) || [];
+                      const description = college.programs?.[0]?.description || '';
+                      
+                      const timeline = [
+                        "Year 1: Complete general education requirements and explore majors",
+                        "Year 2: Declare major and begin core coursework",
+                        "Year 3: Apply for internships and research opportunities",
+                        "Year 4: Complete capstone project and prepare for career/graduate school"
+                      ];
+                      
+                      const fit = college.programs?.[0]?.notable_features 
+                        ? `Strong programs in ${college.programs[0].field_of_study}. ${college.programs[0].notable_features}`
+                        : undefined;
 
-                  return (
-                    <CollegeCard
-                      key={college.id}
-                      id={college.id}
-                      name={college.name}
-                      location={college.location}
-                      ranking={college.ranking}
-                      url={college.url}
-                      gradRate={college.grad_rate}
-                      averageCost={college.average_cost}
-                      acceptanceRate={college.acceptance_rate}
-                      medianSalary={college.median_salary}
-                      size={college.size}
-                      major={college.programs?.[0]?.field_of_study || 'Not specified'}
-                      matchScore={college.matchScore || 75}
-                      description={description}
-                      programs={programNames}
-                      timeline={timeline}
-                      fit={fit}
-                      selected={selectedColleges.includes(college.id)}
-                      onSelect={handleSelect}
-                    />
+                      return (
+                        <CollegeCard
+                          key={college.id}
+                          id={college.id}
+                          name={college.name}
+                          location={college.location}
+                          ranking={college.ranking}
+                          url={college.url}
+                          gradRate={college.grad_rate}
+                          averageCost={college.average_cost}
+                          acceptanceRate={college.acceptance_rate}
+                          medianSalary={college.median_salary}
+                          size={college.size}
+                          major={college.programs?.[0]?.field_of_study || 'Not specified'}
+                          matchScore={college.matchScore || 75}
+                          description={description}
+                          programs={programNames}
+                          timeline={timeline}
+                          fit={fit}
+                          selected={selectedColleges.includes(college.id)}
+                          onSelect={handleSelect}
+                        />
+                      );
+                    })
                   );
-                })
-              )}
+                })() // Added closing parentheses and () to invoke the function
+              }
             </div>
           </div>
 
@@ -260,6 +320,14 @@ export default function Search() {
         onOpenChange={setCompareDialogOpen}
         colleges={getSelectedColleges(colleges)}
         onRemoveCollege={handleRemoveFromCompare}
+      />
+      {/* Filters Dialog */}
+      <FiltersDialog
+        open={filtersOpen}
+        onOpenChange={setFiltersOpen}
+        filters={filters}
+        onApplyFilters={handleApplyFilters}
+        onResetFilters={handleResetFilters}
       />
     </div>
   );
