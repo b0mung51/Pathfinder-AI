@@ -154,6 +154,7 @@ export default function CollegeList() {
         .from("saved_colleges")
         .select(`
           match_score,
+          fit_score,
           colleges:college_id (
             *,
             programs (*)
@@ -203,7 +204,12 @@ export default function CollegeList() {
             median_salary: Number(collegeObj.median_salary ?? 0),
             size: Number(collegeObj.size ?? 0),
             ranking: Number(collegeObj.ranking ?? 0),
-            matchScore: typeof entry.match_score === "number" ? Number(entry.match_score) : undefined,
+            matchScore:
+              typeof entry.fit_score === "number"
+                ? Number(entry.fit_score)
+                : typeof entry.match_score === "number"
+                ? Number(entry.match_score)
+                : undefined,
             programs,
           } as College;
         })

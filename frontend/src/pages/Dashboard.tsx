@@ -18,6 +18,7 @@ type SavedTrack = {
   location?: string | null;
   ranking?: number | null;
   match_score?: number | null;
+  fit_score?: number | null;
 };
 
 type Task = {
@@ -322,6 +323,7 @@ const fetchTasks = useCallback(async () => {
           `
             id,
             match_score,
+            fit_score,
             college_id,
             colleges:college_id (
               name,
@@ -343,19 +345,28 @@ const fetchTasks = useCallback(async () => {
         setTracksError("Unable to load your saved tracks right now.");
       } else {
         const mapped =
-          data?.map((entry) => ({
-            id: entry.id,
-            college_id: entry.college_id,
-            college_name: entry.colleges?.name ?? "Unknown college",
-            location: entry.colleges?.location,
-            ranking: entry.colleges?.ranking ?? null,
-            match_score:
-              typeof entry.match_score === "number"
-                ? Number(entry.match_score)
-                : entry.match_score === null
-                ? null
-                : undefined,
-          })) ?? [];
+          data?.map((entry) => {
+            let derivedScore: number | null | undefined;
+            if (typeof entry.fit_score === "number") {
+              derivedScore = Number(entry.fit_score);
+            } else if (typeof entry.match_score === "number") {
+              derivedScore = Number(entry.match_score);
+            } else if (entry.fit_score === null || entry.match_score === null) {
+              derivedScore = null;
+            } else {
+              derivedScore = undefined;
+            }
+
+            return {
+              id: entry.id,
+              college_id: entry.college_id,
+              college_name: entry.colleges?.name ?? "Unknown college",
+              location: entry.colleges?.location,
+              ranking: entry.colleges?.ranking ?? null,
+              match_score: derivedScore,
+              fit_score: derivedScore,
+            };
+          }) ?? [];
         setSavedTracks(mapped);
       }
 

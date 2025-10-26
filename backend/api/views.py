@@ -387,6 +387,54 @@ class MatchScoreView(APIView):
                     # Log the cache error but do not fail the request
                     print("Failed to cache match recommendations:", cache_error)
 
+        if results:
+            saved_ids: set[str] = set()
+            try:
+                saved_rows = client.table("saved_colleges").select("college_id").eq("user_id", user_id).execute()
+                if saved_rows and saved_rows.data:
+                    saved_ids = {
+                        str(row.get("college_id"))
+                        for row in saved_rows.data
+                        if row.get("college_id") is not None
+                    }
+            except Exception as fetch_error:
+                print("Failed loading saved colleges for fit sync:", fetch_error)
+
+            if saved_ids:
+                payload_updates: List[Dict[str, Any]] = []
+                for item in results:
+                    college_id = item.get("college_id")
+                    if college_id is None:
+                        continue
+                    if str(college_id) not in saved_ids:
+                        continue
+                    score_value = item.get("score")
+                    if score_value is None:
+                        score_value = item.get("heuristic_score")
+                    if score_value is None:
+                        continue
+                    try:
+                        numeric_score = round(float(score_value), 1)
+                    except (TypeError, ValueError):
+                        continue
+                    payload_updates.append(
+                        {
+                            "user_id": user_id,
+                            "college_id": _safe_int(college_id) or college_id,
+                            "fit_score": numeric_score,
+                            "match_score": numeric_score,
+                        }
+                    )
+
+                if payload_updates:
+                    try:
+                        client.table("saved_colleges").upsert(
+                            payload_updates,
+                            on_conflict="user_id,college_id",
+                        ).execute()
+                    except Exception as sync_error:
+                        print("Failed to sync fit scores to saved colleges:", sync_error)
+
         return Response(
             {
                 "user_id": user_id,
