@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { Navbar } from "@/components/Navbar";
 import { CollegeCard } from "@/components/CollegeCard";
 import { CompareDialog } from "@/components/CompareDialog";
@@ -6,6 +6,7 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Card } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
+import { Label } from "@/components/ui/label";
 import { Search as SearchIcon, SlidersHorizontal } from "lucide-react";
 import { supabase } from "@/lib/supabaseClient";
 import { College, Program } from "@/types/college";
@@ -13,6 +14,11 @@ import { useCollegeSelection } from "@/hooks/useCollegeSelection";
 import { useAuth } from "@/hooks/useAuth";
 import { useToast } from "@/hooks/use-toast";
 import { Loader2 } from "lucide-react";
+import { Slider } from "@/components/ui/slider";
+import { RadioGroup, RadioGroupItem } from "@/components/ui/radio-group";
+import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
+
+type SortOption = "match-desc" | "match-asc" | "ranking-asc" | "ranking-desc";
 
 export default function Search() {
   const [colleges, setColleges] = useState<College[]>([]);
@@ -20,6 +26,9 @@ export default function Search() {
   const [error, setError] = useState<string | null>(null);
   const [loading, setLoading] = useState(false);
   const [isSaving, setIsSaving] = useState(false);
+  const [filtersOpen, setFiltersOpen] = useState(false);
+  const [minFitScore, setMinFitScore] = useState(0);
+  const [sortOption, setSortOption] = useState<SortOption>("match-desc");
   const { user, isAuthenticating } = useAuth();
   const { toast } = useToast();
 
@@ -38,6 +47,41 @@ export default function Search() {
     const gradScore = college.grad_rate * 0.3;
     return Math.round(acceptanceScore + costScore + gradScore);
   };
+
+  const handleResetFilters = () => {
+    setMinFitScore(0);
+    setSortOption("match-desc");
+  };
+
+  const filteredColleges = useMemo(() => {
+    const threshold = Math.max(0, Math.min(100, minFitScore));
+
+    const getMatchScore = (college: College) =>
+      typeof college.matchScore === "number" ? college.matchScore : calculateMatchScore(college);
+
+    const matches = colleges.filter((college) => getMatchScore(college) >= threshold);
+
+    const sorted = [...matches].sort((a, b) => {
+      const scoreA = getMatchScore(a);
+      const scoreB = getMatchScore(b);
+
+      switch (sortOption) {
+        case "match-asc":
+          return scoreA - scoreB;
+        case "ranking-asc":
+          return (a.ranking ?? Number.MAX_SAFE_INTEGER) - (b.ranking ?? Number.MAX_SAFE_INTEGER);
+        case "ranking-desc":
+          return (b.ranking ?? Number.MAX_SAFE_INTEGER) - (a.ranking ?? Number.MAX_SAFE_INTEGER);
+        case "match-desc":
+        default:
+          return scoreB - scoreA;
+      }
+    });
+
+    return sorted;
+  }, [colleges, minFitScore, sortOption]);
+
+  const hasScoreFilter = minFitScore > 0;
 
   useEffect(() => {
     let isActive = true;
@@ -141,10 +185,79 @@ export default function Search() {
                     className="pl-9"
                   />
                 </div>
-                <Button variant="outline">
-                  <SlidersHorizontal className="h-4 w-4 mr-2" />
-                  Filters
-                </Button>
+                <Popover open={filtersOpen} onOpenChange={setFiltersOpen}>
+                  <PopoverTrigger asChild>
+                    <Button variant="outline" className="gap-2">
+                      <SlidersHorizontal className="h-4 w-4" />
+                      <span>Filters</span>
+                      {(hasScoreFilter || sortOption !== "match-desc") && (
+                        <span className="h-2 w-2 rounded-full bg-primary" />
+                      )}
+                    </Button>
+                  </PopoverTrigger>
+                  <PopoverContent className="w-80" align="end" side="bottom">
+                    <div className="space-y-4">
+                      <div className="space-y-2">
+                        <div className="flex items-center justify-between text-sm font-medium">
+                          <span>Minimum fit score</span>
+                          <span className="text-muted-foreground">{minFitScore}%</span>
+                        </div>
+                        <Slider
+                          value={[minFitScore]}
+                          min={0}
+                          max={100}
+                          step={5}
+                          onValueChange={(value) => setMinFitScore(value[0] ?? 0)}
+                          aria-label="Minimum fit score"
+                        />
+                      </div>
+                      <div className="space-y-3">
+                        <Label className="text-sm font-medium">Sort results</Label>
+                        <RadioGroup
+                          value={sortOption}
+                          onValueChange={(value) => setSortOption(value as SortOption)}
+                          className="space-y-2"
+                        >
+                          <div className="flex items-center space-x-2">
+                            <RadioGroupItem value="match-desc" id="sort-match-desc" />
+                            <Label htmlFor="sort-match-desc" className="text-sm leading-none">
+                              Match score (high to low)
+                            </Label>
+                          </div>
+                          <div className="flex items-center space-x-2">
+                            <RadioGroupItem value="match-asc" id="sort-match-asc" />
+                            <Label htmlFor="sort-match-asc" className="text-sm leading-none">
+                              Match score (low to high)
+                            </Label>
+                          </div>
+                          <div className="flex items-center space-x-2">
+                            <RadioGroupItem value="ranking-asc" id="sort-ranking-asc" />
+                            <Label htmlFor="sort-ranking-asc" className="text-sm leading-none">
+                              Ranking (best to worst)
+                            </Label>
+                          </div>
+                          <div className="flex items-center space-x-2">
+                            <RadioGroupItem value="ranking-desc" id="sort-ranking-desc" />
+                            <Label htmlFor="sort-ranking-desc" className="text-sm leading-none">
+                              Ranking (worst to best)
+                            </Label>
+                          </div>
+                        </RadioGroup>
+                      </div>
+                      <div className="flex items-center justify-between pt-2 border-t">
+                        <Button variant="ghost" size="sm" onClick={handleResetFilters}>
+                          Reset
+                        </Button>
+                        <Button
+                          size="sm"
+                          onClick={() => setFiltersOpen(false)}
+                        >
+                          Done
+                        </Button>
+                      </div>
+                    </div>
+                  </PopoverContent>
+                </Popover>
               </div>
             </Card>
 
@@ -154,14 +267,20 @@ export default function Search() {
                 <p className="text-muted-foreground text-center py-8">Searching...</p>
               ) : error ? (
                 <p className="text-muted-foreground text-center py-8">{error}</p>
-              ) : colleges.length === 0 ? (
+              ) : filteredColleges.length === 0 ? (
                 <p className="text-muted-foreground text-center py-8">
-                  No colleges found. Try a different search term.
+                  {colleges.length === 0
+                    ? "No colleges found. Try a different search term."
+                    : "No colleges match your filters. Adjust your filter settings and try again."}
                 </p>
               ) : (
-                colleges.map((college) => {
+                filteredColleges.map((college) => {
                   const programNames = college.programs?.map(p => p.name) || [];
                   const description = college.programs?.[0]?.description || '';
+                  const calculatedMatch =
+                    typeof college.matchScore === "number"
+                      ? college.matchScore
+                      : calculateMatchScore(college);
                   
                   const timeline = [
                     "Year 1: Complete general education requirements and explore majors",
@@ -188,7 +307,7 @@ export default function Search() {
                       medianSalary={college.median_salary}
                       size={college.size}
                       majors={college.programs?.map(p => p.name).join(', ') || 'Not specified'}
-                      matchScore={college.matchScore || 75}
+                      matchScore={calculatedMatch}
                       description={description}
                       programs={programNames}
                       timeline={timeline}
@@ -222,7 +341,7 @@ export default function Search() {
                           <div className="flex-1 min-w-0">
                             <p className="font-medium text-sm truncate">{college.name}</p>
                             <Badge variant="secondary" className="mt-1">
-                              {college.matchScore}%
+                              {(college.matchScore ?? calculateMatchScore(college))}%
                             </Badge>
                           </div>
                           <Button

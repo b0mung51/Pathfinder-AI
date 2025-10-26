@@ -35,7 +35,7 @@ interface CollegeCardProps {
   fit?: string; // textual fit information
   selected?: boolean;
   onSelect?: (id: string) => void;
-  onRemove?: (id: string) => void;
+  onRemove?: (id: string) => Promise<void> | void;
   className?: string;
 }
 
@@ -58,7 +58,7 @@ export function CollegeCard({
   fit,
   selected,
   onSelect,
-  //onRemove,
+  onRemove,
   className,
 }: CollegeCardProps) {
   const getMatchColor = (score: number) => {
@@ -131,6 +131,18 @@ export function CollegeCard({
               }}
             >
               {selected ? "Unselect" : "Select"}
+            </Button>
+          )}
+          {onRemove && (
+            <Button
+              size="sm"
+              variant="destructive"
+              onClick={(e) => {
+                e.stopPropagation();
+                void onRemove(id);
+              }}
+            >
+              Delete
             </Button>
           )}
           {/* {onRemove && (
