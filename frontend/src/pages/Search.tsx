@@ -236,7 +236,17 @@ export default function Search() {
                 ) : (
                 colleges.map((college) => (
                   <CollegeCard
-                    key={college.id}
+                    id={college.id}
+                    name={college.name}
+                    location={college.location}
+                    ranking={college.ranking}
+                    url={college.url}
+                    gradRate={college.grad_rate}
+                    averageCost={college.average_cost}
+                    acceptanceRate={college.acceptance_rate}
+                    medianSalary={college.median_salary}
+                    size={college.size}
+                    matchScore={college.score}
                     {...college}
                     selected={selectedColleges.includes(college.id)}
                     onSelect={handleSelect}
