@@ -96,7 +96,7 @@ export const mockColleges = [
 ];
 
 export default function Search() {
-  // selectedColleges has Ids
+  // selectedColleges has Ids that user selected 
   const [selectedColleges, setSelectedColleges] = useState<string[]>([]);
   // colleges has all data for colleges 
   const [colleges, setColleges] = useState<any[]>([]);
@@ -107,179 +107,196 @@ export default function Search() {
   const [loading, setLoading] = useState(false);
   
   const handleSelect = (id: string) => {
-    setSelectedColleges((prev) =>
-      prev.includes(id) ? prev.filter((cid) => cid !== id) : [...prev, id]
-  );
-};
+    setSelectedColleges((prev) => 
+      prev.includes(id) // Check the Id
+      ? prev.filter((cid) => cid !== id) // If it exists, loop through the array and remove the Id
+      : [...prev, id] // If it doesn't then add it to the array
+    );
+  };
 
-useEffect(() => {
-    // Flag to process only current request
-    let isActive = true;
-    
-    const fetchCollege = async () => {
-      // Trim whitespace
-      const query = searchQuery.trim();
+  useEffect(() => {
+      // Flag to process only current request
+      let isActive = true;
+      
+      const fetchCollege = async () => {
+        // Trim whitespace
+        const query = searchQuery.trim();
 
-      // If no user input, return empty results
-      if(!query) {
-        setColleges(mockColleges)
+        // If no user input, return empty results
+        if(!query) {
+          setColleges(mockColleges)
+          setError(null);
+          setLoading(null);
+          return
+        }
+
         setError(null);
         setLoading(null);
-        return
-      }
 
-      setError(null);
-      setLoading(null);
+        // Fetch fuzzy results using user input
+        const {data: collegeData, error: collegeError} = await supabase
+          .from("colleges")
+          .select("*")
+          .ilike("name", `%${query}%`);
 
-      // Fetch fuzzy results using user input
-      const {data: collegeData, error: collegeError} = await supabase
-        .from("colleges")
-        .select("*")
-        .ilike("name", `%${query}%`);
+        // Fetch program from college
+        const {data: programData, error: programError} = await supabase
+          .from("programs")
+          .select("*")
+          .in("college_id", collegeData.map(college => college.id));
 
-      // Fetch program from college
-      const {data: programData, error: programError} = await supabase
-        .from("programs")
-        .select("*")
-        .in("college_id", collegeData.map(college => college.id));
+        // If input changed or component unmounted before query finished - ignore result
+        if (!isActive) return;
+        //console.log(`Query: '${query}'`, collegeData[0]);
+        //console.log("Program Data: ", programData);
+        
+        if (collegeError || programError) {
+          setError("Something went wrong while fetching results");
+          setLoading(false);
+          return;
+        }
 
-      // If input changed or component unmounted before query finished - ignore result
-      if (!isActive) return;
-      console.log(`Query: '${query}'`, collegeData[0]);
-      //console.log("Program Data: ", programData);
-      
-      if (collegeError || programError) {
-        setError("Something went wrong while fetching results");
+        const combinedResults = collegeData.map((college) => {
+          const relatedPrograms = programData.filter(
+            (program) => program.college_id === college.id
+          );
+
+          return {
+            ...college,
+            programs: relatedPrograms, 
+            score: Math.floor(Math.random() * 100) + 1, // add a random score
+          };
+        });
+        //console.log(combinedResults);
+        setColleges(combinedResults);
         setLoading(false);
-        return;
+      }
+      fetchCollege()
+      // When component unmounted early, cancel the request
+      return () => {
+        isActive = false;
       }
 
-      const combinedResults = collegeData.map((college) => {
-        const relatedPrograms = programData.filter(
-          (program) => program.college_id === college.id
-        );
+    }, [searchQuery]);
+    
+    return (
+      <div className="min-h-screen bg-background">
+        <Navbar />
 
-        return {
-          ...college,
-          programs: relatedPrograms, 
-          score: Math.floor(Math.random() * 100) + 1, // add a random score
-        };
-      });
-      console.log(combinedResults);
-      setColleges(combinedResults);
-      setLoading(false);
-    }
-    fetchCollege()
-    // When component unmounted early, cancel the request
-    return () => {
-      isActive = false;
-    }
-
-  }, [searchQuery]);
-  
-  return (
-    <div className="min-h-screen bg-background">
-      <Navbar />
-
-      <main className="container mx-auto px-4 py-8">
-        <div className="mb-8">
-          <h1 className="text-3xl font-bold mb-2">College Search</h1>
-          <p className="text-muted-foreground">
-            Browse and select colleges that match your profile
-          </p>
-        </div>
-
-        <div className="grid grid-cols-1 lg:grid-cols-4 gap-6">
-          {/* Main Content */}
-          <div className="lg:col-span-3 space-y-6">
-            {/* Search Bar */}
-            <Card className="p-4">
-              <div className="flex gap-2">
-                <div className="relative flex-1">
-                  <SearchIcon className="absolute left-3 top-1/2 transform -translate-y-1/2 h-4 w-4 text-muted-foreground" />
-                  <Input
-                    placeholder="Search colleges..."
-                    value={searchQuery}
-                    onChange={(e) => setSearchQuery(e.target.value)}
-                    className="pl-9"
-                  />
-                </div>
-                <Button variant="outline">
-                  <SlidersHorizontal className="h-4 w-4 mr-2" />
-                  Filters
-                </Button>
-              </div>
-            </Card>
-
-            {/* Results */}
-            <div className="space-y-4">
-              {loading ? (
-                 <p className="text-muted-foreground text-center py-8">Searching...</p>
-              ) : error ? (
-                <p className="text-muted-foreground text-center py-8">{error}</p>
-              ) : colleges.length === 0 ? (
-                <p className="text-muted-foreground text-center py-8">
-                  Try searching for a college name or major.
-                </p>
-              ) : (
-              colleges.map((college) => (
-                <CollegeCard
-                  key={college.id}
-                  {...college}
-                />
-              )))}
-            </div>
+        {/*Title */}
+        <main className="container mx-auto px-4 py-8">
+          <div className="mb-8">
+            <h1 className="text-3xl font-bold mb-2">College Search</h1>
+            <p className="text-muted-foreground">
+              Browse and select colleges that match your profile
+            </p>
           </div>
 
-          {/* Sidebar */}
-          <div className="lg:col-span-1">
-            <Card className="p-4 sticky top-20">
-              <h2 className="font-semibold mb-4">Selected Colleges</h2>
-              
-              {selectedColleges.length === 0 ? (
-                <p className="text-sm text-muted-foreground text-center py-8">
-                  No colleges selected yet. Click "Select" on any college to add it here.
-                </p>
-              ) : (
-                <div className="space-y-3">
-                  {selectedColleges.map((id) => {
-                    const college = mockColleges.find((c) => c.id === id);
-                    if (!college) return null;
-                    return (
-                      <Card key={id} className="p-3">
-                        <div className="flex items-start justify-between gap-2">
-                          <div className="flex-1 min-w-0">
-                            <p className="font-medium text-sm truncate">{college.name}</p>
-                            <Badge variant="secondary" className="mt-1">
-                              {college.matchScore}%
-                            </Badge>
-                          </div>
-                          <Button
-                            variant="ghost"
-                            size="sm"
-                            onClick={() => handleSelect(id)}
-                            className="text-destructive hover:text-destructive h-8 px-2"
-                          >
-                            ✕
-                          </Button>
-                        </div>
-                      </Card>
-                    );
-                  })}
-
-                  <Button
-                    variant="hero"
-                    className="w-full mt-4"
-                    disabled={selectedColleges.length < 2}
-                  >
-                    Compare ({selectedColleges.length})
+          <div className="grid grid-cols-1 lg:grid-cols-4 gap-6">
+            {/* Main Content */}
+            <div className="lg:col-span-3 space-y-6">
+              {/* Search Bar */}
+              <Card className="p-4">
+                <div className="flex gap-2">
+                  <div className="relative flex-1">
+                    <SearchIcon className="absolute left-3 top-1/2 transform -translate-y-1/2 h-4 w-4 text-muted-foreground" />
+                    {/* Input textbox */}
+                    <Input
+                      placeholder="Search colleges..."
+                      value={searchQuery}
+                      onChange={(e) => setSearchQuery(e.target.value)}
+                      className="pl-9"
+                    />
+                  </div>
+                  {/* Filter button */}
+                  <Button variant="outline">
+                    <SlidersHorizontal className="h-4 w-4 mr-2" />
+                    Filters
                   </Button>
                 </div>
-              )}
-            </Card>
+              </Card>
+
+
+              {/* Results */}
+              {/*
+              Displays "Searching..." during a database call
+              Displays error message when nothing is returned from database call
+              Displays "Try searching for..." if no matches are found
+              If no issues then display all colleges relevant to the search
+              */}
+              <div className="space-y-4">
+                {loading ? (
+                  <p className="text-muted-foreground text-center py-8">Searching...</p>
+                ) : error ? (
+                  <p className="text-muted-foreground text-center py-8">{error}</p>
+                ) : colleges.length === 0 ? (
+                  <p className="text-muted-foreground text-center py-8">
+                    Try searching for a college name or major.
+                  </p>
+                ) : (
+                colleges.map((college) => (
+                  <CollegeCard
+                    key={college.id}
+                    {...college}
+                    selected={selectedColleges.includes(college.id)}
+                    onSelect={handleSelect}
+                  />
+                )))}
+              </div>
+            </div>
+
+            {/* Sidebar */}
+            <div className="lg:col-span-1">
+              <Card className="p-4 sticky top-20">
+                {/* Empty sidebar container */}
+                <h2 className="font-semibold mb-4">Selected Colleges</h2>
+                
+                {/* Empty message when no colleges selected */}
+                {/* Shows all colleges currently selected */}
+                {selectedColleges.length === 0 ? (
+                  <p className="text-sm text-muted-foreground text-center py-8">
+                    No colleges selected yet. Click "Select" on any college to add it here.
+                  </p>
+                ) : (
+                  <div className="space-y-3">
+                    {selectedColleges.map((id) => {
+                      const college = mockColleges.find((c) => c.id === id);
+                      if (!college) return null;
+                      return (
+                        <Card key={id} className="p-3">
+                          <div className="flex items-start justify-between gap-2">
+                            <div className="flex-1 min-w-0">
+                              <p className="font-medium text-sm truncate">{college.name}</p>
+                              <Badge variant="secondary" className="mt-1">
+                                {college.matchScore}%
+                              </Badge>
+                            </div>
+                            <Button
+                              variant="ghost"
+                              size="sm"
+                              onClick={() => handleSelect(id)}
+                              className="text-destructive hover:text-destructive h-8 px-2"
+                            >
+                              ✕
+                            </Button>
+                          </div>
+                        </Card>
+                      );
+                    })}
+
+                    <Button
+                      variant="hero"
+                      className="w-full mt-4"
+                      disabled={selectedColleges.length < 2}
+                    >
+                      Compare ({selectedColleges.length})
+                    </Button>
+                  </div>
+                )}
+              </Card>
+            </div>
           </div>
-        </div>
-      </main>
-    </div>
-  );
+        </main>
+      </div>
+    );
 }

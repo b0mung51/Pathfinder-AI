@@ -57,33 +57,43 @@ export function CollegeCard({
     >
       <div className="flex items-start justify-between gap-4">
         <div className="flex-1 space-y-3">
+          {/* College and Major Title */}
           <div>
             <h3 className="text-lg font-semibold mb-1">{name}</h3>
             <p className="text-sm text-muted-foreground">{major}</p>
           </div>
 
+          {/* Location Title */}
           <div className="grid grid-cols-2 gap-3 text-sm">
             <div className="flex items-center gap-2">
               <MapPin className="h-4 w-4 text-muted-foreground" />
               <span>{location}</span>
             </div>
+
+            {/* Student Population */}
             <div className="flex items-center gap-2">
               <Users className="h-4 w-4 text-muted-foreground" />
               <span>{size}</span>
             </div>
+
+            {/* Average Cost to Attend */}
             <div className="flex items-center gap-2">
               <DollarSign className="h-4 w-4 text-muted-foreground" />
               <span>{averageCost}</span>
             </div>
+
+            {/* Match Percent Score */}
             <div className="flex items-center gap-2">
               <TrendingUp className="h-4 w-4 text-muted-foreground" />
               <span className={cn("font-semibold", getMatchColor(matchScore))}>
                 {matchScore}% Match
               </span>
             </div>
+
           </div>
         </div>
 
+        {/* Match Comparison Stuff */}
         <div className="flex flex-col gap-2">
           <Badge variant="secondary" className="whitespace-nowrap">
             {matchScore >= 80 ? "Great Fit" : matchScore >= 60 ? "Good Fit" : "Consider"}
@@ -91,10 +101,10 @@ export function CollegeCard({
           {onSelect && (
             <Button
               size="sm"
-              variant={selected ? "outline" : "default"}
+              variant={selected ? "destructive" : "default"}
               onClick={() => onSelect(id)}
             >
-              {selected ? "Selected" : "Select"}
+              {selected ? "Unselect" : "Select"}
             </Button>
           )}
           {onRemove && (
