@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { useNavigate } from "react-router-dom";
 import { Card } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
@@ -10,6 +10,8 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { ProgressBar } from "@/components/ProgressBar";
 import { useToast } from "@/hooks/use-toast";
 import { ChevronRight, ChevronLeft } from "lucide-react";
+import { supabase } from "@/lib/supabaseClient";
+import { useAuth } from "@/hooks/useAuth";
 
 const questions = [
   {
@@ -52,20 +54,65 @@ export default function Questionnaire() {
   const [major, setMajor] = useState("");
   const [costRange, setCostRange] = useState([20000]);
   const [preferences, setPreferences] = useState<string[]>([]);
+  const [isLoading, setIsLoading] = useState(true);
+  const [isSubmitting, setIsSubmitting] = useState(false);
   const navigate = useNavigate();
   const { toast } = useToast();
+  const { user, isAuthenticating } = useAuth();
 
   const totalSteps = questions.length + 2; // questions + stats + preferences
+
+  useEffect(() => {
+    if (isAuthenticating) return;
+    if (!user) {
+      navigate("/auth", { replace: true });
+      return;
+    }
+
+    const loadExisting = async () => {
+      try {
+        const { data, error } = await supabase
+          .from("user_preferences")
+          .select("*")
+          .eq("user_id", user.id)
+          .maybeSingle();
+
+        if (error) {
+          console.error("Failed to fetch preferences", error);
+          return;
+        }
+
+        if (data) {
+          setGpa(data.gpa !== null && data.gpa !== undefined ? String(data.gpa) : "");
+          setSat(data.sat_score !== null && data.sat_score !== undefined ? String(data.sat_score) : "");
+          setMajor(data.intended_major ?? "");
+          setCostRange([data.budget ?? 20000]);
+          setPreferences(Array.isArray(data.preference_tags) ? data.preference_tags : []);
+          setResponses(
+            data.responses && typeof data.responses === "object"
+              ? (data.responses as Record<string, number>)
+              : {}
+          );
+        }
+      } finally {
+        setIsLoading(false);
+      }
+    };
+
+    loadExisting();
+  }, [isAuthenticating, user, navigate]);
 
   const handleResponse = (questionId: string, value: number) => {
     setResponses((prev) => ({ ...prev, [questionId]: value }));
   };
 
-  const handleNext = () => {
+  const handleNext = async () => {
+    if (isSubmitting) return;
+
     if (step < totalSteps - 1) {
       setStep(step + 1);
     } else {
-      handleSubmit();
+      await handleSubmit();
     }
   };
 
@@ -75,15 +122,63 @@ export default function Questionnaire() {
     }
   };
 
-  const handleSubmit = () => {
-    toast({
-      title: "Profile Complete!",
-      description: "Generating your personalized college recommendations...",
-    });
-    setTimeout(() => navigate("/"), 1500);
+  const handleSubmit = async () => {
+    if (!user) {
+      toast({
+        title: "Sign in required",
+        description: "Please sign in before saving your questionnaire.",
+        variant: "destructive",
+      });
+      navigate("/auth", { replace: true });
+      return;
+    }
+    setIsSubmitting(true);
+    try {
+      const payload = {
+        user_id: user.id,
+        gpa: gpa ? Number(gpa) : null,
+        sat_score: sat ? Number(sat) : null,
+        intended_major: major || null,
+        budget: costRange?.[0] ?? null,
+        preference_tags: preferences,
+        responses,
+      };
+
+      const { error } = await supabase.from("user_preferences").upsert(payload, {
+        onConflict: "user_id",
+      });
+
+      if (error) {
+        throw error;
+      }
+
+      toast({
+        title: "Profile saved!",
+        description: "Generating your personalized college recommendations...",
+      });
+      setTimeout(() => navigate("/dashboard"), 1200);
+    } catch (error) {
+      const message = error instanceof Error ? error.message : "Unable to save your preferences.";
+      toast({
+        title: "Save failed",
+        description: message,
+        variant: "destructive",
+      });
+    } finally {
+      setIsSubmitting(false);
+    }
   };
 
   const scaleLabels = ["Strongly Disagree", "Disagree", "Neutral", "Agree", "Strongly Agree"];
+  const isDisabled = useMemo(() => isSubmitting || isAuthenticating || isLoading, [isSubmitting, isAuthenticating, isLoading]);
+
+  if (isLoading) {
+    return (
+      <div className="min-h-screen gradient-subtle flex items-center justify-center">
+        <p className="text-muted-foreground">Loading your questionnaire...</p>
+      </div>
+    );
+  }
 
   return (
     <div className="min-h-screen gradient-subtle py-12 px-4">
@@ -113,6 +208,7 @@ export default function Questionnaire() {
                   placeholder="3.8"
                   value={gpa}
                   onChange={(e) => setGpa(e.target.value)}
+                  disabled={isDisabled}
                 />
               </div>
 
@@ -124,12 +220,13 @@ export default function Questionnaire() {
                   placeholder="1400"
                   value={sat}
                   onChange={(e) => setSat(e.target.value)}
+                  disabled={isDisabled}
                 />
               </div>
 
               <div className="space-y-2">
                 <Label htmlFor="major">Intended Major</Label>
-                <Select value={major} onValueChange={setMajor}>
+                <Select value={major} onValueChange={setMajor} disabled={isDisabled}>
                   <SelectTrigger id="major">
                     <SelectValue placeholder="Select a major" />
                   </SelectTrigger>
@@ -154,6 +251,7 @@ export default function Questionnaire() {
                   min={5000}
                   step={5000}
                   className="py-4"
+                  disabled={isDisabled}
                 />
                 <p className="text-sm text-muted-foreground">
                   This helps us recommend colleges within your budget
@@ -221,6 +319,7 @@ export default function Questionnaire() {
                         setPreferences(preferences.filter((p) => p !== pref));
                       }
                     }}
+                    disabled={isDisabled}
                   />
                   <Label htmlFor={pref} className="cursor-pointer">
                     {pref}
@@ -234,13 +333,13 @@ export default function Questionnaire() {
             <Button
               variant="outline"
               onClick={handleBack}
-              disabled={step === 0}
+              disabled={step === 0 || isDisabled}
             >
               <ChevronLeft className="h-4 w-4 mr-2" />
               Back
             </Button>
-            <Button onClick={handleNext} variant="hero">
-              {step === totalSteps - 1 ? "Generate My Plan" : "Next"}
+            <Button onClick={handleNext} variant="hero" disabled={isDisabled}>
+              {step === totalSteps - 1 ? (isSubmitting ? "Saving..." : "Generate My Plan") : "Next"}
               {step < totalSteps - 1 && <ChevronRight className="h-4 w-4 ml-2" />}
             </Button>
           </div>

@@ -24,7 +24,49 @@ export default function Auth() {
         redirectGuardRef.current = false;
         return;
       }
-      navigate("/dashboard", { replace: true });
+
+      const routeAfterAuth = async () => {
+        try {
+          const metadata = user.user_metadata ?? {};
+          const displayName =
+            (typeof metadata.full_name === "string" && metadata.full_name.trim()) ||
+            (typeof metadata.name === "string" && metadata.name.trim()) ||
+            "";
+          const avatar =
+            (typeof metadata.avatar_url === "string" && metadata.avatar_url.trim()) ||
+            (typeof metadata.picture === "string" && metadata.picture.trim()) ||
+            null;
+
+          await supabase
+            .from("profiles")
+            .upsert(
+              {
+                id: user.id,
+                full_name: displayName || null,
+                email: user.email ?? null,
+                avatar_url: avatar,
+              },
+              { onConflict: "id" }
+            );
+
+          const { data, error } = await supabase
+            .from("user_preferences")
+            .select("user_id")
+            .eq("user_id", user.id)
+            .maybeSingle();
+
+          if (error) {
+            throw error;
+          }
+
+          navigate(data ? "/dashboard" : "/questionnaire", { replace: true });
+        } catch (err) {
+          console.error("Failed to determine post-login route", err);
+          navigate("/dashboard", { replace: true });
+        }
+      };
+
+      routeAfterAuth();
     }
   }, [isAuthenticating, user, navigate]);
 
@@ -86,8 +128,6 @@ export default function Auth() {
         title: "Welcome back!",
         description: "You have successfully signed in.",
       });
-      redirectGuardRef.current = true;
-      navigate("/dashboard");
     } catch (error) {
       const message = error instanceof Error ? error.message : "Unable to sign in. Please try again.";
       toast({
