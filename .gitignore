@@ -42,3 +42,5 @@ coverage/
 .coverage
 .coverage.*
 *.lcov
+
+college_search_results.json
