@@ -13,6 +13,7 @@ import {
   DialogFooter,
   DialogClose,
 } from "@/components/ui/dialog";
+import { College, Program } from "@/types/college";
 
 interface CollegeCardProps {
   id: string;
@@ -124,7 +125,10 @@ export function CollegeCard({
             <Button
               size="sm"
               variant={selected ? "destructive" : "default"}
-              onClick={() => onSelect(id)}
+              onClick={(e) => {
+                e.stopPropagation(); // Prevent card click event
+                if (onSelect) onSelect(id);
+              }}
             >
               {selected ? "Unselect" : "Select"}
             </Button>
@@ -133,7 +137,10 @@ export function CollegeCard({
             <Button
               size="sm"
               variant="destructive"
-              onClick={() => onRemove(id)}
+              onClick={(e) => {
+                e.stopPropagation(); // Prevent card click event
+                if (onRemove) onRemove(id);
+              }}
             >
               Remove
             </Button>
@@ -146,7 +153,8 @@ export function CollegeCard({
         <DialogContent 
           className="max-w-6xl overflow-auto"
           style={{maxHeight: '90vh'}}
-          >
+          onOpenAutoFocus={(e) => e.preventDefault()}
+        >
           <DialogHeader>
             <DialogTitle>{name}</DialogTitle>
             <DialogDescription>
@@ -202,29 +210,14 @@ export function CollegeCard({
               )}
             </div>
           </div>
-
           <DialogFooter>
             <div className="flex items-center gap-2 w-full justify-between">
               <a href={url} target="_blank" rel="noreferrer" className="text-sm underline">
                 View official site
               </a>
-              <div className="flex gap-2">
-                <Button
-                  variant="default"
-                  onClick={() => {
-                    // keep the dialog open if user wants to select from modal
-                    if (onSelect) onSelect(id);
-                  }}
-                >
-                  Select
-                </Button>
-                <DialogClose asChild>
-                  <Button variant="ghost">Close</Button>
-                </DialogClose>
-              </div>
             </div>
           </DialogFooter>
-        </DialogContent>
+          </DialogContent>
       </Dialog>
     </>
   );
