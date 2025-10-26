@@ -2,5 +2,4 @@ from pg_connector import *
 
 newCon = SupabaseConnector()
 
-
-newCon.batchInsertData("profiles", batchData)
+print(newCon.joinTables("programs", "colleges", col1_key="college_id", col2_key="id"))

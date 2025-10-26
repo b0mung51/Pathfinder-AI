@@ -126,4 +126,22 @@ class SupabaseConnector:
         if data.data:
             return list(data.data[0].keys())
         return []
-   
+    def joinTables(self, table1, table2, col1_key, col2_key, where_criteria):
+        """    
+        Join two tables in the database.
+         Args:
+            tables (list[str]): List of table names to join. Must contain exactly two table names.
+            col1_key (str): Column name from the first table to join on.
+            col2_key (str): Column name from the second table to join on.
+         Returns:
+            list[dict]: Joined data from the two tables.
+         Raises:
+            ValueError: If not exactly two tables are provided.
+        """    
+       
+        client = self.get_client()
+        query = client.table(table1).select(f"*, {col1_key}, {table2}(*)").where(where_criteria)
+        #response = supabase.table("users").select("id, name, orders(*)").execute()
+        data = query.execute()
+        return data.data
+
