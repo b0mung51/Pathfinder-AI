@@ -1,65 +1,70 @@
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { Navbar } from "@/components/Navbar";
 import { Card } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
-import { GripVertical, Trash2, BarChart3 } from "lucide-react";
+import { supabase } from '@/lib/supabaseClient';
+import { CollegeCard } from '@/components/CollegeCard';
 
-interface RankedCollege {
-  id: string;
-  rank: number;
+interface Program {
+  id: number;
   name: string;
-  location: string;
-  cost: string;
-  matchScore: number;
-  major: string;
+  degree_type: string;
+  field_of_study: string;
+  prestige: number;
+  ranking_in_field: number;
+  specialty: string;
+  notable_features: string;
+  description: string;
 }
 
-const initialColleges: RankedCollege[] = [
-  {
-    id: "1",
-    rank: 1,
-    name: "Stanford University",
-    location: "Stanford, CA",
-    cost: "$55k/year",
-    matchScore: 85,
-    major: "Computer Science",
-  },
-  {
-    id: "2",
-    rank: 2,
-    name: "MIT",
-    location: "Cambridge, MA",
-    cost: "$53k/year",
-    matchScore: 82,
-    major: "Engineering",
-  },
-  {
-    id: "3",
-    rank: 3,
-    name: "UC Berkeley",
-    location: "Berkeley, CA",
-    cost: "$43k/year",
-    matchScore: 80,
-    major: "Computer Science",
-  },
-  {
-    id: "4",
-    rank: 4,
-    name: "Carnegie Mellon",
-    location: "Pittsburgh, PA",
-    cost: "$58k/year",
-    matchScore: 78,
-    major: "Computer Science",
-  },
-];
+interface College {
+  id: string;
+  name: string;
+  location: string;
+  ranking: number;
+  url: string;
+  grad_rate: number;
+  average_cost: number;
+  acceptance_rate: number;
+  median_salary: number;
+  size: number;
+  programs?: Program[];
+}
 
 export default function CollegeList() {
-  const [colleges, setColleges] = useState<RankedCollege[]>(initialColleges);
+  const [colleges, setColleges] = useState<College[]>([]);
+  const [loading, setLoading] = useState(true);
   const [selectedForCompare, setSelectedForCompare] = useState<string[]>([]);
 
+  useEffect(() => {
+    async function fetchColleges() {
+      console.log('Fetching colleges from Supabase...'); // Debug log
+      
+      const { data, error } = await supabase
+        .from('colleges')
+        .select(`
+          *,
+          programs (*)
+        `)
+        .order('ranking', { ascending: true });
+      
+      if (error) {
+        console.error('Error fetching colleges:', error);
+        setLoading(false);
+        return;
+      }
+      
+      console.log('Fetched colleges:', data); // Debug log
+      setColleges(data || []);
+      setLoading(false);
+    }
+
+    fetchColleges();
+  }, []);
+
   const handleRemove = (id: string) => {
-    setColleges(colleges.filter((c) => c.id !== id).map((c, idx) => ({ ...c, rank: idx + 1 })));
+    setColleges(colleges.filter((c) => c.id !== id));
   };
 
   const toggleCompareSelection = (id: string) => {
@@ -68,8 +73,33 @@ export default function CollegeList() {
     );
   };
 
-  const avgCost = colleges.reduce((sum, c) => sum + parseInt(c.cost.replace(/[^0-9]/g, "")), 0) / colleges.length;
-  const avgMatch = colleges.reduce((sum, c) => sum + c.matchScore, 0) / colleges.length;
+  const calculateMatchScore = (college: College) => {
+    const acceptanceScore = (100 - college.acceptance_rate) * 0.4;
+    const costScore = Math.max(0, 100 - (college.average_cost / 1000)) * 0.3;
+    const gradScore = college.grad_rate * 0.3;
+    return Math.round(acceptanceScore + costScore + gradScore);
+  };
+
+  const avgCost = colleges.length > 0 
+    ? colleges.reduce((sum, c) => sum + c.average_cost, 0) / colleges.length 
+    : 0;
+
+  const avgMatch = colleges.length > 0
+    ? colleges.reduce((sum, c) => sum + calculateMatchScore(c), 0) / colleges.length
+    : 0;
+
+  if (loading) {
+    return (
+      <div className="min-h-screen bg-background">
+        <Navbar />
+        <main className="container mx-auto px-4 py-8">
+          <div className="text-center py-12">
+            <p className="text-muted-foreground">Loading colleges...</p>
+          </div>
+        </main>
+      </div>
+    );
+  }
 
   return (
     <div className="min-h-screen bg-background">
@@ -89,63 +119,52 @@ export default function CollegeList() {
             {colleges.length === 0 ? (
               <Card className="p-12 text-center">
                 <p className="text-muted-foreground mb-4">
-                  Your college list is empty. Add colleges from the search page!
+                  No colleges found in database. Add some colleges to get started!
                 </p>
                 <Button variant="hero">Browse Colleges</Button>
               </Card>
             ) : (
-              colleges.map((college) => (
-                <Card
-                  key={college.id}
-                  className={`p-6 transition-smooth hover:shadow-card-hover ${
-                    selectedForCompare.includes(college.id) ? "ring-2 ring-primary" : ""
-                  }`}
-                >
-                  <div className="flex items-start gap-4">
-                    {/* Drag Handle */}
-                    <div className="cursor-grab active:cursor-grabbing pt-2">
-                      <GripVertical className="h-5 w-5 text-muted-foreground" />
-                    </div>
+              colleges.map((college) => {
+                const programNames = college.programs?.map(p => p.name) || [];
+                const description = college.programs?.[0]?.description || '';
+                const matchScore = calculateMatchScore(college);
+                
+                const timeline = [
+                  "Year 1: Complete general education requirements and explore majors",
+                  "Year 2: Declare major and begin core coursework",
+                  "Year 3: Apply for internships and research opportunities",
+                  "Year 4: Complete capstone project and prepare for career/graduate school"
+                ];
+                
+                const fit = college.programs?.[0]?.notable_features 
+                  ? `Strong programs in ${college.programs[0].field_of_study}. ${college.programs[0].notable_features}`
+                  : undefined;
 
-                    {/* Rank Badge */}
-                    <div className="flex items-center justify-center w-10 h-10 rounded-full bg-primary text-primary-foreground font-bold shrink-0">
-                      #{college.rank}
-                    </div>
-
-                    {/* College Info */}
-                    <div className="flex-1 min-w-0">
-                      <h3 className="text-lg font-semibold mb-1">{college.name}</h3>
-                      <p className="text-sm text-muted-foreground mb-3">{college.major}</p>
-                      
-                      <div className="flex flex-wrap gap-4 text-sm">
-                        <span className="text-muted-foreground">{college.location}</span>
-                        <span className="text-muted-foreground">{college.cost}</span>
-                        <Badge variant="secondary">{college.matchScore}% Match</Badge>
-                      </div>
-                    </div>
-
-                    {/* Actions */}
-                    <div className="flex gap-2">
-                      <Button
-                        variant="outline"
-                        size="icon"
-                        onClick={() => toggleCompareSelection(college.id)}
-                        className={selectedForCompare.includes(college.id) ? "bg-secondary" : ""}
-                      >
-                        <BarChart3 className="h-4 w-4" />
-                      </Button>
-                      <Button
-                        variant="ghost"
-                        size="icon"
-                        onClick={() => handleRemove(college.id)}
-                        className="text-destructive hover:text-destructive hover:bg-destructive/10"
-                      >
-                        <Trash2 className="h-4 w-4" />
-                      </Button>
-                    </div>
-                  </div>
-                </Card>
-              ))
+                return (
+                  <CollegeCard
+                    key={college.id}
+                    id={college.id}
+                    name={college.name}
+                    location={college.location}
+                    ranking={college.ranking}
+                    url={college.url}
+                    gradRate={college.grad_rate}
+                    averageCost={`$${college.average_cost.toLocaleString()}`}
+                    acceptanceRate={college.acceptance_rate}
+                    medianSalary={college.median_salary}
+                    size={college.size}
+                    major={college.programs?.[0]?.field_of_study || 'Not specified'}
+                    matchScore={matchScore}
+                    description={description}
+                    programs={programNames}
+                    timeline={timeline}
+                    fit={fit}
+                    selected={selectedForCompare.includes(college.id)}
+                    onSelect={toggleCompareSelection}
+                    onRemove={handleRemove}
+                  />
+                );
+              })
             )}
           </div>
 
