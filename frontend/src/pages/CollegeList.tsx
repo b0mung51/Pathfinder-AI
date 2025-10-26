@@ -41,6 +41,7 @@ function SortableCollegeCard({
   onSelect,
   onRemove,
   isOrganizeMode,
+  onRemoveProgram,
 }: {
   college: College;
   matchScore: number;
@@ -50,8 +51,9 @@ function SortableCollegeCard({
   fit?: string;
   selected: boolean;
   onSelect: (id: string) => void;
-  onRemove: (id: string) => Promise<void> | void;
+  onRemove?: (id: string) => Promise<void> | void;
   isOrganizeMode: boolean;
+  onRemoveProgram?: (collegeId: string, programId: number | string) => Promise<void> | void;
 }) {
   const {
     attributes,
@@ -61,6 +63,12 @@ function SortableCollegeCard({
     transition,
     isDragging,
   } = useSortable({ id: college.id });
+
+  const savedPrograms = college.savedPrograms ?? [];
+  const displayPrograms = savedPrograms.length ? savedPrograms : college.programs ?? [];
+  const majorsText = displayPrograms.length
+    ? displayPrograms.map((p) => p.name).join(', ')
+    : 'Not specified';
 
   const style = {
     transform: CSS.Transform.toString(transform),
@@ -88,7 +96,7 @@ function SortableCollegeCard({
           acceptanceRate={college.acceptance_rate}
           medianSalary={college.median_salary}
           size={college.size}
-          majors={college.programs?.map(p => p.name).join(', ') || 'Not specified'}          
+          majors={majorsText}
           matchScore={matchScore}
           description={description}
           programs={programNames}
@@ -96,7 +104,10 @@ function SortableCollegeCard({
           fit={fit}
           selected={selected}
           onSelect={isOrganizeMode ? undefined : onSelect}
-          onRemove={onRemove}
+          onRemove={college.isVirtual ? undefined : onRemove}
+          savedPrograms={savedPrograms}
+          isVirtual={college.isVirtual}
+          onRemoveProgram={onRemoveProgram}
         />
       </div>
     </div>
@@ -133,11 +144,32 @@ export default function CollegeList() {
   useEffect(() => {
     let isMounted = true;
 
-    const hydrateProgram = (program: any) => ({
-      ...program,
-      id: String(program.id),
-      college_id: String(program.college_id),
-    });
+    const hydrateProgram = (program: any) => {
+      const toNumber = (value: unknown, fallback = 0) => {
+        if (typeof value === "number" && Number.isFinite(value)) {
+          return value;
+        }
+        const parsed = Number(value);
+        return Number.isFinite(parsed) ? parsed : fallback;
+      };
+
+      return {
+        ...program,
+        id: toNumber(program?.id),
+        college_id:
+          program?.college_id !== undefined && program?.college_id !== null
+            ? String(program.college_id)
+            : '',
+        name: program?.name ?? '',
+        degree_type: program?.degree_type ?? '',
+        field_of_study: program?.field_of_study ?? '',
+        prestige: toNumber(program?.prestige, 0),
+        ranking_in_field: toNumber(program?.ranking_in_field, 0),
+        specialty: program?.specialty ?? '',
+        notable_features: program?.notable_features ?? '',
+        description: program?.description ?? '',
+      };
+    };
 
     const fetchColleges = async () => {
       if (!user) {
@@ -178,38 +210,141 @@ export default function CollegeList() {
         return;
       }
 
-      const normalized =
-        data?.map((entry) => {
-          const rawCollege = entry.colleges;
-          if (!rawCollege) {
-            return null;
+      const collegeMap = new Map<string, College>();
+      const ordering: string[] = [];
+
+      data?.forEach((entry) => {
+        const rawCollege = entry.colleges;
+        if (!rawCollege) {
+          return;
+        }
+
+        const collegeObj = Array.isArray(rawCollege) ? rawCollege[0] : rawCollege;
+
+        const programs = Array.isArray(collegeObj.programs)
+          ? collegeObj.programs.map(hydrateProgram)
+          : [];
+
+        const hydrated: College = {
+          id: String(collegeObj.id ?? ''),
+          name: String(collegeObj.name ?? ''),
+          location: String(collegeObj.location ?? ''),
+          url: String(collegeObj.url ?? ''),
+          average_cost: Number(collegeObj.average_cost ?? 0),
+          acceptance_rate: Number(collegeObj.acceptance_rate ?? 0),
+          grad_rate: Number(collegeObj.grad_rate ?? 0),
+          median_salary: Number(collegeObj.median_salary ?? 0),
+          size: Number(collegeObj.size ?? 0),
+          ranking: Number(collegeObj.ranking ?? 0),
+          matchScore:
+            typeof entry.match_score === "number" ? Number(entry.match_score) : undefined,
+          programs,
+          savedPrograms: [],
+          isVirtual: false,
+        };
+
+        collegeMap.set(hydrated.id, hydrated);
+        ordering.push(hydrated.id);
+      });
+
+      const { data: savedProgramsData, error: savedProgramsError } = await supabase
+        .from("saved_programs")
+        .select(`
+          program_id,
+          college_id,
+          programs:program_id (
+            id,
+            college_id,
+            name,
+            degree_type,
+            field_of_study,
+            prestige,
+            ranking_in_field,
+            specialty,
+            notable_features,
+            description
+          ),
+          colleges:college_id (
+            id,
+            name,
+            location,
+            url,
+            average_cost,
+            acceptance_rate,
+            grad_rate,
+            median_salary,
+            size,
+            ranking,
+            programs (*)
+          )
+        `)
+        .eq("user_id", user.id)
+        .order("created_at", { ascending: true });
+
+      if (savedProgramsError) {
+        console.error("Error fetching saved programs:", savedProgramsError);
+      } else {
+        (savedProgramsData ?? []).forEach((row: any) => {
+          const programPayload = Array.isArray(row.programs) ? row.programs[0] : row.programs;
+          if (!programPayload) {
+            return;
           }
 
-          // Supabase can return a single object or an array depending on the relation; handle both.
-          const collegeObj = Array.isArray(rawCollege) ? rawCollege[0] : rawCollege;
+          const hydratedProgram = hydrateProgram(programPayload);
+          const collegePayload = Array.isArray(row.colleges) ? row.colleges[0] : row.colleges;
+          const collegeId = String(hydratedProgram.college_id ?? row.college_id ?? "");
+          if (!collegeId) {
+            return;
+          }
 
-          const programs = Array.isArray(collegeObj.programs)
-            ? collegeObj.programs.map(hydrateProgram)
-            : [];
+          let targetCollege = collegeMap.get(collegeId);
 
-          return {
-            id: String(collegeObj.id ?? ''),
-            name: String(collegeObj.name ?? ''),
-            location: String(collegeObj.location ?? ''),
-            url: String(collegeObj.url ?? ''),
-            average_cost: Number(collegeObj.average_cost ?? 0),
-            acceptance_rate: Number(collegeObj.acceptance_rate ?? 0),
-            grad_rate: Number(collegeObj.grad_rate ?? 0),
-            median_salary: Number(collegeObj.median_salary ?? 0),
-            size: Number(collegeObj.size ?? 0),
-            ranking: Number(collegeObj.ranking ?? 0),
-            matchScore: typeof entry.match_score === "number" ? Number(entry.match_score) : undefined,
-            programs,
-          } as College;
-        })
-          .filter((college): college is College => Boolean(college)) ?? [];
+          if (!targetCollege) {
+            const derivedPrograms = Array.isArray(collegePayload?.programs)
+              ? collegePayload.programs.map(hydrateProgram)
+              : [];
 
-      setColleges(normalized);
+            const virtualCollege: College = {
+              id: collegeId,
+              name: String(collegePayload?.name ?? "Unknown College"),
+              location: String(collegePayload?.location ?? ""),
+              url: String(collegePayload?.url ?? ""),
+              average_cost: Number(collegePayload?.average_cost ?? 0),
+              acceptance_rate: Number(collegePayload?.acceptance_rate ?? 0),
+              grad_rate: Number(collegePayload?.grad_rate ?? 0),
+              median_salary: Number(collegePayload?.median_salary ?? 0),
+              size: Number(collegePayload?.size ?? 0),
+              ranking: Number(collegePayload?.ranking ?? 0),
+              matchScore: undefined,
+              programs: derivedPrograms,
+              savedPrograms: [],
+              isVirtual: true,
+            };
+
+            collegeMap.set(collegeId, virtualCollege);
+            ordering.push(collegeId);
+            targetCollege = virtualCollege;
+          }
+
+          if (!targetCollege.savedPrograms) {
+            targetCollege.savedPrograms = [];
+          }
+
+          const alreadyIncluded = targetCollege.savedPrograms.some(
+            (program) => program.id === hydratedProgram.id
+          );
+
+          if (!alreadyIncluded) {
+            targetCollege.savedPrograms.push(hydratedProgram);
+          }
+        });
+      }
+
+      const orderedColleges = ordering
+        .map((idValue) => collegeMap.get(idValue))
+        .filter((college): college is College => Boolean(college));
+
+      setColleges(orderedColleges);
       setLoading(false);
     };
 
@@ -239,6 +374,64 @@ export default function CollegeList() {
         description: "We couldn't remove that college. Please refresh and try again.",
         variant: "destructive",
       });
+    }
+  };
+
+  const handleRemoveProgram = async (collegeId: string, programId: number | string) => {
+    const numericProgramId = Number(programId);
+    if (!Number.isFinite(numericProgramId)) {
+      console.warn("Cannot remove program with non-numeric id", programId);
+      return;
+    }
+
+    let rollbackState: College[] = [];
+
+    setColleges((prev) => {
+      rollbackState = prev;
+      const next: College[] = [];
+
+      prev.forEach((college) => {
+        if (college.id !== collegeId) {
+          next.push(college);
+          return;
+        }
+
+        const updatedSavedPrograms = (college.savedPrograms ?? []).filter(
+          (program) => program.id !== numericProgramId
+        );
+
+        if (updatedSavedPrograms.length === 0 && college.isVirtual) {
+          // Removing the last program from a virtual college removes the entire card.
+          return;
+        }
+
+        next.push({
+          ...college,
+          savedPrograms: updatedSavedPrograms,
+        });
+      });
+
+      return next;
+    });
+
+    if (!user) {
+      return;
+    }
+
+    const { error } = await supabase
+      .from("saved_programs")
+      .delete()
+      .eq("user_id", user.id)
+      .eq("program_id", numericProgramId);
+
+    if (error) {
+      console.error("Failed to remove saved program", error);
+      toast({
+        title: "Remove failed",
+        description: "We couldn't remove that program. Please refresh and try again.",
+        variant: "destructive",
+      });
+      setColleges(rollbackState);
     }
   };
 
@@ -328,8 +521,13 @@ export default function CollegeList() {
                   strategy={verticalListSortingStrategy}
                 >
                   {colleges.map((college) => {
-                    const programNames = college.programs?.map(p => p.name) || [];
-                    const description = college.programs?.[0]?.description || '';
+                    const savedPrograms = college.savedPrograms ?? [];
+                    const displayPrograms = savedPrograms.length
+                      ? savedPrograms
+                      : college.programs ?? [];
+                    const primaryProgram = displayPrograms[0];
+                    const programNames = displayPrograms.map((p) => p.name);
+                    const description = primaryProgram?.description || '';
                     const matchScore = calculateMatchScore(college);
                     
                     const timeline = [
@@ -339,8 +537,10 @@ export default function CollegeList() {
                       "Year 4: Complete capstone project and prepare for career/graduate school"
                     ];
                     
-                    const fit = college.programs?.[0]?.notable_features 
-                      ? `Strong programs in ${college.programs[0].field_of_study}. ${college.programs[0].notable_features}`
+                    const fieldOfStudyText = primaryProgram?.field_of_study || "this field";
+
+                    const fit = primaryProgram?.notable_features
+                      ? `Strong programs in ${fieldOfStudyText}. ${primaryProgram.notable_features}`
                       : undefined;
 
                     return (
@@ -356,6 +556,7 @@ export default function CollegeList() {
                         onSelect={handleSelect}
                         onRemove={handleRemove}
                         isOrganizeMode={isOrganizeMode}
+                        onRemoveProgram={handleRemoveProgram}
                       />
                     );
                   })}

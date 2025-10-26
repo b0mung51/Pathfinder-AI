@@ -1,9 +1,9 @@
-import { MapPin, Users, DollarSign, TrendingUp } from "lucide-react";
+import { MapPin, Users, DollarSign, TrendingUp, Trash2 } from "lucide-react";
 import { Card } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { cn } from "@/lib/utils";
-import { useState } from "react";
+import { MouseEvent, useState } from "react";
 import {
   Dialog,
   DialogContent,
@@ -36,7 +36,10 @@ interface CollegeCardProps {
   selected?: boolean;
   onSelect?: (id: string) => void;
   onRemove?: (id: string) => Promise<void> | void;
+  onRemoveProgram?: (collegeId: string, programId: number | string) => Promise<void> | void;
   className?: string;
+  savedPrograms?: Program[];
+  isVirtual?: boolean;
 }
 
 export function CollegeCard({
@@ -59,7 +62,10 @@ export function CollegeCard({
   selected,
   onSelect,
   onRemove,
+  onRemoveProgram,
   className,
+  savedPrograms,
+  isVirtual,
 }: CollegeCardProps) {
   const getMatchColor = (score: number) => {
     if (score >= 80) return "text-green-600";
@@ -67,6 +73,28 @@ export function CollegeCard({
     return "text-yellow-600";
   };
   const [open, setOpen] = useState(false);
+  const [removingProgramId, setRemovingProgramId] = useState<number | string | null>(null);
+
+  const hasSavedPrograms = Array.isArray(savedPrograms) && savedPrograms.length > 0;
+
+  const handleProgramRemove = async (
+    event: MouseEvent<HTMLButtonElement>,
+    program: Program
+  ) => {
+    event.stopPropagation();
+    if (!onRemoveProgram) {
+      return;
+    }
+
+    setRemovingProgramId(program.id);
+    try {
+      await onRemoveProgram(id, program.id);
+    } catch (error) {
+      console.error("Failed to remove saved program", error);
+    } finally {
+      setRemovingProgramId(null);
+    }
+  };
 
   return (
     <>
@@ -78,88 +106,96 @@ export function CollegeCard({
           className
         )}
       >
-      <div className="flex items-start justify-between gap-4">
-        <div className="flex-1 space-y-3">
-          {/* College and Major Title */}
-          <div>
-            <h3 className="text-lg font-semibold mb-1">{name}</h3>
-            <p className="text-sm text-muted-foreground">{majors}</p>
+        <div className="flex items-start justify-between gap-4">
+          <div className="flex-1 space-y-3">
+            <div>
+              <h3 className="text-lg font-semibold mb-1">{name}</h3>
+              <p className="text-sm text-muted-foreground">{majors}</p>
+            </div>
+
+            <div className="grid grid-cols-2 gap-3 text-sm">
+              <div className="flex items-center gap-2">
+                <MapPin className="h-4 w-4 text-muted-foreground" />
+                <span>{location}</span>
+              </div>
+              <div className="flex items-center gap-2">
+                <Users className="h-4 w-4 text-muted-foreground" />
+                <span>{size}</span>
+              </div>
+              <div className="flex items-center gap-2">
+                <DollarSign className="h-4 w-4 text-muted-foreground" />
+                <span>{averageCost}</span>
+              </div>
+              <div className="flex items-center gap-2">
+                <TrendingUp className="h-4 w-4 text-muted-foreground" />
+                <span className={cn("font-semibold", getMatchColor(matchScore))}>
+                  {matchScore}% Match
+                </span>
+              </div>
+            </div>
+
+            {hasSavedPrograms && (
+              <div className="mt-4 rounded-md border p-4">
+                <h4 className="text-sm font-semibold mb-2">Saved Programs</h4>
+                <ul className="space-y-2 text-sm text-muted-foreground">
+                  {savedPrograms!.map((program) => (
+                    <li key={program.id} className="flex items-center justify-between gap-2">
+                      <div className="flex flex-wrap items-center gap-2">
+                        <span className="font-medium text-foreground">{program.name}</span>
+                        {program.degree_type && <Badge variant="outline">{program.degree_type}</Badge>}
+                        {program.field_of_study && <Badge variant="outline">{program.field_of_study}</Badge>}
+                        {program.specialty && <Badge variant="secondary">{program.specialty}</Badge>}
+                      </div>
+                      {onRemoveProgram && (
+                        <Button
+                          variant="ghost"
+                          size="icon"
+                          className="h-8 w-8 text-muted-foreground hover:text-destructive"
+                          onClick={(event) => handleProgramRemove(event, program)}
+                          disabled={removingProgramId === program.id}
+                        >
+                          <Trash2 className="h-4 w-4" />
+                          <span className="sr-only">Remove saved program</span>
+                        </Button>
+                      )}
+                    </li>
+                  ))}
+                </ul>
+              </div>
+            )}
           </div>
 
-          {/* Location Title */}
-          <div className="grid grid-cols-2 gap-3 text-sm">
-            <div className="flex items-center gap-2">
-              <MapPin className="h-4 w-4 text-muted-foreground" />
-              <span>{location}</span>
-            </div>
-
-            {/* Student Population */}
-            <div className="flex items-center gap-2">
-              <Users className="h-4 w-4 text-muted-foreground" />
-              <span>{size}</span>
-            </div>
-
-            {/* Average Cost to Attend */}
-            <div className="flex items-center gap-2">
-              <DollarSign className="h-4 w-4 text-muted-foreground" />
-              <span>{averageCost}</span>
-            </div>
-
-            {/* Match Percent Score */}
-            <div className="flex items-center gap-2">
-              <TrendingUp className="h-4 w-4 text-muted-foreground" />
-              <span className={cn("font-semibold", getMatchColor(matchScore))}>
-                {matchScore}% Match
-              </span>
-            </div>
-
+          <div className="flex flex-col items-end gap-2">
+            <Badge variant="secondary" className="whitespace-nowrap">
+              {matchScore >= 80 ? "Great Fit" : matchScore >= 60 ? "Good Fit" : "Consider"}
+            </Badge>
+            {onSelect && (
+              <Button
+                size="sm"
+                variant={selected ? "destructive" : "default"}
+                onClick={(e) => {
+                  e.stopPropagation();
+                  onSelect(id);
+                }}
+              >
+                {selected ? "Unselect" : "Select"}
+              </Button>
+            )}
+            {onRemove && !isVirtual && (
+              <Button
+                size="sm"
+                variant="destructive"
+                onClick={(e) => {
+                  e.stopPropagation();
+                  void onRemove(id);
+                }}
+              >
+                Delete
+              </Button>
+            )}
           </div>
         </div>
-
-        {/* Match Comparison Stuff */}
-        <div className="flex flex-col gap-2">
-          <Badge variant="secondary" className="whitespace-nowrap">
-            {matchScore >= 80 ? "Great Fit" : matchScore >= 60 ? "Good Fit" : "Consider"}
-          </Badge>
-          {onSelect && (
-            <Button
-              size="sm"
-              variant={selected ? "destructive" : "default"}
-              onClick={(e) => {
-                e.stopPropagation(); // Prevent card click event
-                if (onSelect) onSelect(id);
-              }}
-            >
-              {selected ? "Unselect" : "Select"}
-            </Button>
-          )}
-          {onRemove && (
-            <Button
-              size="sm"
-              variant="destructive"
-              onClick={(e) => {
-                e.stopPropagation();
-                void onRemove(id);
-              }}
-            >
-              Delete
-            </Button>
-          )}
-          {/* {onRemove && (
-            <Button
-              size="sm"
-              variant="destructive"
-              onClick={(e) => {
-                e.stopPropagation(); // Prevent card click event
-                if (onRemove) onRemove(id);
-              }}
-            >
-              Remove
-            </Button>
-          )} */}
-        </div>
-      </div>
-    </Card>
+      </Card>
 
       <Dialog open={open} onOpenChange={setOpen}>
         <DialogContent 
@@ -182,6 +218,46 @@ export function CollegeCard({
 
           <div className="grid gap-4 py-4">
             {description && <p className="text-sm text-muted-foreground">{description}</p>}
+
+            {hasSavedPrograms && (
+              <div className="space-y-3">
+                <h4 className="text-sm font-semibold">Your Saved Programs</h4>
+                <div className="space-y-3">
+                  {savedPrograms!.map((program) => (
+                    <div key={program.id} className="rounded-md border p-3 text-sm">
+                      <div className="flex items-start justify-between gap-3">
+                        <div className="flex-1 space-y-2">
+                          <div className="flex flex-wrap items-center gap-2 text-foreground">
+                            <span className="font-medium">{program.name}</span>
+                            {program.degree_type && <Badge variant="secondary">{program.degree_type}</Badge>}
+                            {program.field_of_study && <Badge variant="outline">{program.field_of_study}</Badge>}
+                            {program.specialty && <Badge variant="outline">{program.specialty}</Badge>}
+                          </div>
+                          {program.description && (
+                            <p className="text-muted-foreground">{program.description}</p>
+                          )}
+                          {program.notable_features && (
+                            <p className="text-muted-foreground">Highlights: {program.notable_features}</p>
+                          )}
+                        </div>
+                        {onRemoveProgram && (
+                          <Button
+                            variant="ghost"
+                            size="icon"
+                            className="h-8 w-8 text-muted-foreground hover:text-destructive"
+                            onClick={(event) => handleProgramRemove(event, program)}
+                            disabled={removingProgramId === program.id}
+                          >
+                            <Trash2 className="h-4 w-4" />
+                            <span className="sr-only">Remove saved program</span>
+                          </Button>
+                        )}
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              </div>
+            )}
 
             <div className="grid grid-cols-2 gap-4">
               <div>

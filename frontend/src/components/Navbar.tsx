@@ -1,5 +1,5 @@
 import { Link, useLocation, useNavigate } from "react-router-dom";
-import { GraduationCap, Search, ListChecks, User, LogOut, LogIn } from "lucide-react";
+import { GraduationCap, Search, ListChecks, User, LogOut, LogIn, BookOpen } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { cn } from "@/lib/utils";
 import { useAuth } from "@/hooks/useAuth";
@@ -8,6 +8,7 @@ import { useToast } from "@/hooks/use-toast";
 const navItems = [
   { label: "Dashboard", path: "/dashboard", icon: GraduationCap },
   { label: "College Search", path: "/search", icon: Search },
+  { label: "Program Search", path: "/program-search", icon: BookOpen },
   { label: "My List", path: "/list", icon: ListChecks },
   { label: "Profile", path: "/profile", icon: User },
 ];

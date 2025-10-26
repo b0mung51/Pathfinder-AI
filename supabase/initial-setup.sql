@@ -295,6 +295,41 @@ create policy "Saved colleges - owner can delete"
   using (auth.uid() = user_id);
 
 -- ---------------------------------------------------------------------------
+-- Saved programs (user-managed lists)
+-- ---------------------------------------------------------------------------
+create table if not exists public.saved_programs (
+  id uuid primary key default gen_random_uuid(),
+  user_id uuid not null references auth.users on delete cascade,
+  program_id bigint not null references public.programs(id) on delete cascade,
+  college_id bigint not null references public.colleges(id) on delete cascade,
+  created_at timestamptz default timezone('utc'::text, now()),
+  updated_at timestamptz default timezone('utc'::text, now()),
+  unique (user_id, program_id)
+);
+
+alter table public.saved_programs enable row level security;
+
+drop trigger if exists saved_programs_touch on public.saved_programs;
+create trigger saved_programs_touch
+before update on public.saved_programs
+for each row execute function public.touch_updated_at();
+
+drop policy if exists "Saved programs - owner can read" on public.saved_programs;
+create policy "Saved programs - owner can read"
+  on public.saved_programs for select
+  using (auth.uid() = user_id);
+
+drop policy if exists "Saved programs - owner can insert" on public.saved_programs;
+create policy "Saved programs - owner can insert"
+  on public.saved_programs for insert
+  with check (auth.uid() = user_id);
+
+drop policy if exists "Saved programs - owner can delete" on public.saved_programs;
+create policy "Saved programs - owner can delete"
+  on public.saved_programs for delete
+  using (auth.uid() = user_id);
+
+-- ---------------------------------------------------------------------------
 -- Match recommendations cache
 -- ---------------------------------------------------------------------------
 create table if not exists public.match_recommendations (

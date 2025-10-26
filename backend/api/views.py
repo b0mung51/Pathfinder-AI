@@ -118,6 +118,29 @@ def _format_currency(value: float | None) -> str:
     return f"${rounded:,}"
 
 
+def _extract_keywords(source: Any, *, min_length: int = 3) -> set[str]:
+    """Flatten nested structures into a canonical set of lowercase keyword tokens."""
+
+    keywords: set[str] = set()
+
+    def _consume(value: Any) -> None:
+        if value is None:
+            return
+        if isinstance(value, str):
+            for token in re.split(r"[^a-z0-9]+", value.lower()):
+                if len(token) >= min_length:
+                    keywords.add(token)
+        elif isinstance(value, dict):
+            for nested in value.values():
+                _consume(nested)
+        elif isinstance(value, (list, tuple, set)):
+            for nested in value:
+                _consume(nested)
+
+    _consume(source)
+    return keywords
+
+
 supabase = SupabaseConnector()
 
 
@@ -167,7 +190,12 @@ def calculate_match_score(
     use_llm: bool = False,
 ) -> Dict[str, Any]:
     """Create a weighted match score; optionally refine with an LLM."""
-    weights = {"affordability": 0.4, "admissions": 0.35, "ranking": 0.25}
+    weights = {
+        "affordability": 0.3,
+        "admissions": 0.2,
+        "ranking": 0.2,
+        "related_to_interest": 0.3,
+    }
     total_weight = 0.0
     score_accumulator = 0.0
     explanations: list[str] = []
@@ -206,6 +234,88 @@ def calculate_match_score(
             explanations.append("Solid ranking relative to the field.")
         else:
             explanations.append("Ranking provides a balanced safety option.")
+
+    intended_major_raw = str(user_pref.get("intended_major") or "").strip()
+    preference_tags = user_pref.get("preference_tags")
+    interested_programs = user_pref.get("interested_programs")
+
+    interest_components: list[float] = []
+    interest_highlights: list[str] = []
+
+    college_keyword_sources = [
+        college.get("name"),
+        college.get("location"),
+        college.get("state"),
+        college.get("description"),
+        college.get("program_focus"),
+        college.get("notable_programs"),
+        college.get("specialties"),
+        college.get("tags"),
+        college.get("highlights"),
+    ]
+
+    programs_payload = college.get("programs")
+    if isinstance(programs_payload, list):
+        college_keyword_sources.append(programs_payload)
+
+    college_terms = _extract_keywords(college_keyword_sources)
+
+    major_tokens = _extract_keywords(intended_major_raw)
+    if major_tokens:
+        overlap = len(major_tokens & college_terms)
+        if major_tokens:
+            interest_components.append(overlap / len(major_tokens))
+        if overlap:
+            interest_highlights.append(intended_major_raw)
+
+    matched_tags: list[str] = []
+    tag_denominator = 0
+    if isinstance(preference_tags, list):
+        for tag in preference_tags:
+            tag_tokens = _extract_keywords(tag)
+            if not tag_tokens:
+                continue
+            tag_denominator += 1
+            if tag_tokens & college_terms:
+                matched_tags.append(str(tag))
+        if tag_denominator:
+            interest_components.append(len(matched_tags) / tag_denominator)
+            interest_highlights.extend(matched_tags[:2])
+
+    matched_program_interests = 0
+    program_interest_denominator = 0
+    if isinstance(interested_programs, list):
+        for interest in interested_programs:
+            interest_tokens = _extract_keywords(interest)
+            if not interest_tokens:
+                continue
+            program_interest_denominator += 1
+            if interest_tokens & college_terms:
+                matched_program_interests += 1
+                interest_highlights.append(str(interest))
+        if program_interest_denominator:
+            interest_components.append(matched_program_interests / program_interest_denominator)
+
+    related_to_interest_score = None
+    if interest_components:
+        related_to_interest_score = sum(interest_components) / len(interest_components)
+        score_accumulator += related_to_interest_score * weights["related_to_interest"]
+        total_weight += weights["related_to_interest"]
+
+        if related_to_interest_score >= 0.6 and interest_highlights:
+            explanations.append(
+                "Strong alignment with your interests in "
+                + ", ".join(dict.fromkeys([highlight for highlight in interest_highlights if highlight]))
+                + "."
+            )
+        elif related_to_interest_score > 0:
+            explanations.append(
+                "Shows some overlap with your stated interests; dive deeper into specific programs to confirm the fit."
+            )
+        else:
+            explanations.append(
+                "Consider verifying program offerings—clear alignment with your interests was not found in the available data."
+            )
 
     if total_weight == 0:
         normalized_score = 0.5

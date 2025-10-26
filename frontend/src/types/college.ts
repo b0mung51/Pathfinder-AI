@@ -24,4 +24,6 @@ export interface College {
   size: number;
   programs?: Program[];
   matchScore?: number;
+  savedPrograms?: Program[];
+  isVirtual?: boolean;
 }
