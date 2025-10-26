@@ -186,6 +186,7 @@ export default function CollegeList() {
         .from("saved_colleges")
         .select(`
           match_score,
+          fit_score,
           colleges:college_id (
             *,
             programs (*)
@@ -299,10 +300,34 @@ export default function CollegeList() {
 
           let targetCollege = collegeMap.get(collegeId);
 
+<<<<<<< HEAD
           if (!targetCollege) {
             const derivedPrograms = Array.isArray(collegePayload?.programs)
               ? collegePayload.programs.map(hydrateProgram)
               : [];
+=======
+          return {
+            id: String(collegeObj.id ?? ''),
+            name: String(collegeObj.name ?? ''),
+            location: String(collegeObj.location ?? ''),
+            url: String(collegeObj.url ?? ''),
+            average_cost: Number(collegeObj.average_cost ?? 0),
+            acceptance_rate: Number(collegeObj.acceptance_rate ?? 0),
+            grad_rate: Number(collegeObj.grad_rate ?? 0),
+            median_salary: Number(collegeObj.median_salary ?? 0),
+            size: Number(collegeObj.size ?? 0),
+            ranking: Number(collegeObj.ranking ?? 0),
+            matchScore:
+              typeof entry.fit_score === "number"
+                ? Number(entry.fit_score)
+                : typeof entry.match_score === "number"
+                ? Number(entry.match_score)
+                : undefined,
+            programs,
+          } as College;
+        })
+          .filter((college): college is College => Boolean(college)) ?? [];
+>>>>>>> 3111cebbcb2ff2c4145fd0806d0c16a95df6dfba
 
             const virtualCollege: College = {
               id: collegeId,

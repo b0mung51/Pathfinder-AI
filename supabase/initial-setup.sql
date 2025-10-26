@@ -261,12 +261,14 @@ create table if not exists public.saved_colleges (
   user_id uuid not null references auth.users on delete cascade,
   college_id bigint not null references public.colleges(id) on delete cascade,
   match_score numeric,
+  fit_score numeric,
   created_at timestamptz default timezone('utc'::text, now()),
   updated_at timestamptz default timezone('utc'::text, now()),
   unique (user_id, college_id)
 );
 
 alter table public.saved_colleges enable row level security;
+alter table public.saved_colleges add column if not exists fit_score numeric;
 
 drop trigger if exists saved_colleges_set_updated_at on public.saved_colleges;
 create trigger saved_colleges_set_updated_at

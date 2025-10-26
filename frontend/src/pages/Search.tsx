@@ -18,7 +18,7 @@ import { Slider } from "@/components/ui/slider";
 import { RadioGroup, RadioGroupItem } from "@/components/ui/radio-group";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
 
-type SortOption = "match-desc" | "match-asc" | "ranking-asc" | "ranking-desc";
+type SortOption = "match-desc" | "match-asc" | "cost-desc" | "cost-asc";
 
 export default function Search() {
   const [colleges, setColleges] = useState<College[]>([]);
@@ -68,10 +68,10 @@ export default function Search() {
       switch (sortOption) {
         case "match-asc":
           return scoreA - scoreB;
-        case "ranking-asc":
-          return (a.ranking ?? Number.MAX_SAFE_INTEGER) - (b.ranking ?? Number.MAX_SAFE_INTEGER);
-        case "ranking-desc":
-          return (b.ranking ?? Number.MAX_SAFE_INTEGER) - (a.ranking ?? Number.MAX_SAFE_INTEGER);
+        case "cost-asc":
+          return (a.average_cost ?? Number.MAX_SAFE_INTEGER) - (b.average_cost ?? Number.MAX_SAFE_INTEGER);
+        case "cost-desc":
+          return (b.average_cost ?? -Number.MAX_SAFE_INTEGER) - (a.average_cost ?? -Number.MAX_SAFE_INTEGER);
         case "match-desc":
         default:
           return scoreB - scoreA;
@@ -231,15 +231,15 @@ export default function Search() {
                             </Label>
                           </div>
                           <div className="flex items-center space-x-2">
-                            <RadioGroupItem value="ranking-asc" id="sort-ranking-asc" />
-                            <Label htmlFor="sort-ranking-asc" className="text-sm leading-none">
-                              Ranking (best to worst)
+                            <RadioGroupItem value="cost-desc" id="sort-cost-desc" />
+                            <Label htmlFor="sort-cost-desc" className="text-sm leading-none">
+                              Price (high to low)
                             </Label>
                           </div>
                           <div className="flex items-center space-x-2">
-                            <RadioGroupItem value="ranking-desc" id="sort-ranking-desc" />
-                            <Label htmlFor="sort-ranking-desc" className="text-sm leading-none">
-                              Ranking (worst to best)
+                            <RadioGroupItem value="cost-asc" id="sort-cost-asc" />
+                            <Label htmlFor="sort-cost-asc" className="text-sm leading-none">
+                              Price (low to high)
                             </Label>
                           </div>
                         </RadioGroup>
@@ -335,13 +335,17 @@ export default function Search() {
                   {selectedColleges.map((id) => {
                     const college = colleges.find((c) => c.id === id);
                     if (!college) return null;
+                    const scoreValue =
+                      typeof college.matchScore === "number"
+                        ? Math.round(college.matchScore)
+                        : calculateMatchScore(college);
                     return (
                       <Card key={id} className="p-3">
                         <div className="flex items-center justify-between gap-2">
                           <div className="flex-1 min-w-0">
                             <p className="font-medium text-sm truncate">{college.name}</p>
                             <Badge variant="secondary" className="mt-1">
-                              {(college.matchScore ?? calculateMatchScore(college))}%
+                              {`${scoreValue}%`}
                             </Badge>
                           </div>
                           <Button
@@ -385,13 +389,28 @@ export default function Search() {
                           if (!college) {
                             return null;
                           }
+                          const rawScore =
+                            typeof college.matchScore === "number"
+                              ? college.matchScore
+                              : calculateMatchScore(college);
+                          const roundedScore = Math.round(rawScore * 10) / 10;
                           return {
                             user_id: user.id,
                             college_id: Number(college.id),
-                            match_score: college.matchScore ?? null,
+                            match_score: roundedScore,
+                            fit_score: roundedScore,
                           };
                         })
-                        .filter((entry): entry is { user_id: string; college_id: number; match_score: number | null } => Boolean(entry));
+                        .filter(
+                          (
+                            entry
+                          ): entry is {
+                            user_id: string;
+                            college_id: number;
+                            match_score: number | null;
+                            fit_score: number | null;
+                          } => Boolean(entry)
+                        );
 
                       if (payload.length === 0) {
                         toast({
