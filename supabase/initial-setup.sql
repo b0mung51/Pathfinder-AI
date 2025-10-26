@@ -121,6 +121,27 @@ create table if not exists public.colleges (
   updated_at timestamptz default timezone('utc'::text, now())
 );
 
+-- Automatically scale acceptance_rate by 100 when inserting a new college
+create or replace function public.scale_rates()
+returns trigger
+language plpgsql
+as $$
+begin
+  if new.acceptance_rate is not null then
+    new.acceptance_rate := new.acceptance_rate * 100;
+  if new.rejection_rate is not null then
+    new.rejection_rate := new.rejection_rate * 100;
+  end if;
+  end if;
+  return new;
+end;
+$$;
+
+drop trigger if exists colleges_scale_rate on public.colleges;
+create trigger colleges_scale_rate
+before insert on public.colleges
+for each row execute function public.scale_rate();
+
 alter table public.colleges enable row level security;
 
 drop trigger if exists colleges_set_updated_at on public.colleges;
