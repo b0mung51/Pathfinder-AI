@@ -22,7 +22,7 @@ interface CollegeCardProps {
   ranking: number;
   url: string;
   gradRate: number;
-  averageCost: string;
+  averageCost: number;
   acceptanceRate: number;
   medianSalary: number;
   size: number;
