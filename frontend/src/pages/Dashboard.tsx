@@ -10,6 +10,8 @@ import { useAuth } from "@/hooks/useAuth";
 import { supabase } from "@/lib/supabaseClient";
 import { Target, TrendingUp, Calendar, Plus, CheckCircle2, Loader2, X } from "lucide-react";
 
+const API_BASE_URL = import.meta.env.VITE_API_BASE_URL ?? "http://127.0.0.1:8000/api";
+
 type Track = {
   id: string;
   college: string;
@@ -59,12 +61,21 @@ type Task = {
   created_at: string;
 };
 
+type MatchResult = {
+  college_id: number | string;
+  college_name: string;
+  score: number;
+};
+
 export default function Dashboard() {
   const { user, isAuthenticating } = useAuth();
   const [tracks, setTracks] = useState<Track[]>(initialTracks);
   const [tasks, setTasks] = useState<Task[]>([]);
+  const [matches, setMatches] = useState<MatchResult[]>([]);
   const [isLoadingTasks, setIsLoadingTasks] = useState(false);
+  const [isLoadingMatches, setIsLoadingMatches] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [matchError, setMatchError] = useState<string | null>(null);
   const [trackError, setTrackError] = useState<string | null>(null);
   const [newTaskTitle, setNewTaskTitle] = useState("");
   const [newTaskDueDate, setNewTaskDueDate] = useState("");
@@ -128,6 +139,73 @@ export default function Dashboard() {
     }
   }, [isAuthenticating, fetchTasks]);
 
+  useEffect(() => {
+    if (!user) {
+      setMatches([]);
+      setIsLoadingMatches(false);
+      return;
+    }
+
+    let isActive = true;
+    const controller = new AbortController();
+
+    const fetchMatches = async () => {
+      setIsLoadingMatches(true);
+      setMatchError(null);
+
+      try {
+        const url = new URL("/match-scores/", API_BASE_URL);
+        url.searchParams.set("user_id", user.id);
+        url.searchParams.set("limit", "5");
+        url.searchParams.set("use_llm", "true");
+
+        const response = await fetch(url.toString(), {
+          signal: controller.signal,
+          headers: {
+            "Content-Type": "application/json",
+          },
+        });
+
+        if (!response.ok) {
+          throw new Error(`Failed to load match scores (${response.status})`);
+        }
+
+        const payload = await response.json();
+        if (!isActive) return;
+
+        const simplified = Array.isArray(payload.results)
+          ? payload.results.map((item: Record<string, unknown>) => ({
+              college_id: item.college_id ?? item.id ?? crypto.randomUUID(),
+              college_name: String(item.college_name ?? item.name ?? "Unknown college"),
+              score: typeof item.score === "number" ? item.score : Number(item.score) || 0,
+            }))
+          : [];
+
+        setMatches(simplified);
+        setMatchError(null);
+      } catch (err) {
+        if (controller.signal.aborted) return;
+        console.error("Failed to fetch match scores", err);
+        setMatchError("Unable to load match scores at the moment.");
+        setMatches([]);
+      } finally {
+        if (isActive) {
+          setIsLoadingMatches(false);
+        }
+      }
+    };
+
+    void fetchMatches();
+
+    return () => {
+      isActive = false;
+      controller.abort();
+    };
+  }, [user]);
+
+  useEffect(() => {
+    console.log("Dashboard user:", user?.id);
+  }, [user]);
   const handleAddTrack = (event: FormEvent<HTMLFormElement>) => {
     event.preventDefault();
 
@@ -371,21 +449,31 @@ export default function Dashboard() {
             <Card className="p-6">
               <h2 className="text-xl font-semibold mb-4">Top Recommended Colleges</h2>
               <div className="space-y-3">
-                {[
-                  { name: "Stanford University", match: 85, location: "California" },
-                  { name: "MIT", match: 82, location: "Massachusetts" },
-                  { name: "UC Berkeley", match: 80, location: "California" },
-                ].map((college, idx) => (
-                  <Card key={idx} className="p-4 hover:shadow-card transition-smooth cursor-pointer">
-                    <div className="flex items-center justify-between">
-                      <div>
-                        <h3 className="font-semibold">{college.name}</h3>
-                        <p className="text-sm text-muted-foreground">{college.location}</p>
+                {isAuthenticating && !user ? (
+                  <p className="text-muted-foreground">Sign in to view personalized match scores.</p>
+                ) : isLoadingMatches ? (
+                  <div className="flex items-center justify-center py-6 text-muted-foreground">
+                    <Loader2 className="h-4 w-4 mr-2 animate-spin" />
+                    Calculating your matches...
+                  </div>
+                ) : matchError ? (
+                  <p className="text-destructive text-sm">{matchError}</p>
+                ) : matches.length === 0 ? (
+                  <p className="text-muted-foreground text-sm">
+                    No personalized matches yet. Update your preferences or check back soon.
+                  </p>
+                ) : (
+                  matches.map((match) => (
+                    <Card key={match.college_id} className="p-4 hover:shadow-card transition-smooth cursor-pointer">
+                      <div className="flex items-center justify-between gap-3">
+                        <div>
+                          <h3 className="font-semibold">{match.college_name}</h3>
+                        </div>
+                        <Badge variant="secondary">{match.score.toFixed(1)}% Match</Badge>
                       </div>
-                      <Badge variant="secondary">{college.match}% Match</Badge>
-                    </div>
-                  </Card>
-                ))}
+                    </Card>
+                  ))
+                )}
               </div>
               <Button variant="outline" className="w-full mt-4" asChild>
                 <a href="/search">View All Recommendations</a>
