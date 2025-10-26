@@ -50,7 +50,7 @@ function SortableCollegeCard({
   fit?: string;
   selected: boolean;
   onSelect: (id: string) => void;
-  onRemove: (id: string) => void;
+  onRemove: (id: string) => Promise<void> | void;
   isOrganizeMode: boolean;
 }) {
   const {
@@ -96,7 +96,7 @@ function SortableCollegeCard({
           fit={fit}
           selected={selected}
           onSelect={isOrganizeMode ? undefined : onSelect}
-          onRemove={isOrganizeMode ? onRemove : undefined}
+          onRemove={onRemove}
         />
       </div>
     </div>
@@ -180,24 +180,29 @@ export default function CollegeList() {
 
       const normalized =
         data?.map((entry) => {
-          const college = entry.colleges;
-          if (!college) {
+          const rawCollege = entry.colleges;
+          if (!rawCollege) {
             return null;
           }
 
-          const programs = Array.isArray(college.programs)
-            ? college.programs.map(hydrateProgram)
+          // Supabase can return a single object or an array depending on the relation; handle both.
+          const collegeObj = Array.isArray(rawCollege) ? rawCollege[0] : rawCollege;
+
+          const programs = Array.isArray(collegeObj.programs)
+            ? collegeObj.programs.map(hydrateProgram)
             : [];
 
           return {
-            ...college,
-            id: String(college.id),
-            average_cost: Number(college.average_cost ?? 0),
-            acceptance_rate: Number(college.acceptance_rate ?? 0),
-            grad_rate: Number(college.grad_rate ?? 0),
-            median_salary: Number(college.median_salary ?? 0),
-            size: Number(college.size ?? 0),
-            ranking: Number(college.ranking ?? 0),
+            id: String(collegeObj.id ?? ''),
+            name: String(collegeObj.name ?? ''),
+            location: String(collegeObj.location ?? ''),
+            url: String(collegeObj.url ?? ''),
+            average_cost: Number(collegeObj.average_cost ?? 0),
+            acceptance_rate: Number(collegeObj.acceptance_rate ?? 0),
+            grad_rate: Number(collegeObj.grad_rate ?? 0),
+            median_salary: Number(collegeObj.median_salary ?? 0),
+            size: Number(collegeObj.size ?? 0),
+            ranking: Number(collegeObj.ranking ?? 0),
             matchScore: typeof entry.match_score === "number" ? Number(entry.match_score) : undefined,
             programs,
           } as College;
