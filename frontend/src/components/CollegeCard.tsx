@@ -35,7 +35,7 @@ interface CollegeCardProps {
   fit?: string; // textual fit information
   selected?: boolean;
   onSelect?: (id: string) => void;
-  //onRemove?: (id: string) => void;
+  onRemove?: (id: string) => void;
   className?: string;
 }
 
