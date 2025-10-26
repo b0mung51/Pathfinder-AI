@@ -62,9 +62,6 @@ for term in search_terms:
     
     for post in results:
         result_data = {
-            'search_term': term,
-            'subreddit': str(post.subreddit),
-            'title': post.title,
             'score': post.score,
             'url': f"https://reddit.com{post.permalink}",
             'body': post.selftext,
