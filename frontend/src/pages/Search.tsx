@@ -15,13 +15,13 @@ export const mockColleges = [
     location: "Stanford, CA",
     ranking: 3,
     url: "https://www.stanford.edu",
-    gradRate: 94,
-    averageCost: "$55,473",
-    acceptanceRate: 4,
+    grad_rate: 0.94,
+    average_cost: 55473,
+    acceptance_rate: 0.04,
     medianSalary: 128000,
     size: 7000,
-    major: "Computer Science",
-    matchScore: 89,
+    majors: "Computer Science",
+    score: 89,
   },
   {
     id: "2",
@@ -29,13 +29,13 @@ export const mockColleges = [
     location: "Cambridge, MA",
     ranking: 2,
     url: "https://www.mit.edu",
-    gradRate: 95,
-    averageCost: "$53,790",
-    acceptanceRate: 7,
-    medianSalary: 135000,
+    grad_rate: 0.95,
+    average_cost: 53790,
+    acceptance_rate: 0.07,
+    median_salary: 135000,
     size: 4500,
-    major: "Engineering",
-    matchScore: 86,
+    majors: "Engineering",
+    score: 86,
   },
   {
     id: "3",
@@ -43,13 +43,13 @@ export const mockColleges = [
     location: "Berkeley, CA",
     ranking: 22,
     url: "https://www.berkeley.edu",
-    gradRate: 91,
-    averageCost: "$43,232",
-    acceptanceRate: 15,
-    medianSalary: 110000,
+    grad_rate: 0.91,
+    average_cost: 43232,
+    acceptance_rate: 0.15,
+    median_salary: 110000,
     size: 31000,
-    major: "Computer Science",
-    matchScore: 81,
+    majors: "Computer Science",
+    score: 81,
   },
   {
     id: "4",
@@ -57,13 +57,13 @@ export const mockColleges = [
     location: "Pittsburgh, PA",
     ranking: 25,
     url: "https://www.cmu.edu",
-    gradRate: 90,
-    averageCost: "$58,924",
-    acceptanceRate: 13,
-    medianSalary: 115000,
+    grad_rate: 0.90,
+    average_cost: 58924,
+    acceptance_rate: 0.13,
+    median_salary: 115000,
     size: 7000,
-    major: "Computer Science",
-    matchScore: 78,
+    majors: "Computer Science",
+    score: 78,
   },
   {
     id: "5",
@@ -71,13 +71,13 @@ export const mockColleges = [
     location: "Seattle, WA",
     ranking: 40,
     url: "https://www.washington.edu",
-    gradRate: 84,
-    averageCost: "$38,312",
-    acceptanceRate: 48,
-    medianSalary: 98000,
+    grad_rate: 0.84,
+    average_cost: 38312,
+    acceptance_rate: 0.48,
+    median_salary: 98000,
     size: 47000,
-    major: "Computer Science",
-    matchScore: 75,
+    majors: "Computer Science",
+    score: 75,
   },
   {
     id: "6",
@@ -85,13 +85,13 @@ export const mockColleges = [
     location: "Atlanta, GA",
     ranking: 33,
     url: "https://www.gatech.edu",
-    gradRate: 88,
-    averageCost: "$33,964",
-    acceptanceRate: 18,
-    medianSalary: 102000,
+    grad_rate: 0.88,
+    average_cost: 33964,
+    acceptance_rate: 0.18,
+    median_salary: 102000,
     size: 16000,
-    major: "Computer Science",
-    matchScore: 76,
+    majors: "Computer Science",
+    score: 76,
   },
 ];
 
@@ -163,7 +163,10 @@ export default function Search() {
 
           return {
             ...college,
-            programs: relatedPrograms, 
+            //Extract all programs into a string seperated by ','
+            programs: relatedPrograms
+            .map((p) => p.name).
+            join(", "), 
             score: Math.floor(Math.random() * 100) + 1, // add a random score
           };
         });
@@ -241,13 +244,14 @@ export default function Search() {
                     location={college.location}
                     ranking={college.ranking}
                     url={college.url}
-                    gradRate={college.grad_rate}
+                    gradRate={Math.round(college.grad_rate * 100)}
                     averageCost={college.average_cost}
-                    acceptanceRate={college.acceptance_rate}
+                    acceptanceRate={Math.round(college.acceptance_rate * 100)}
                     medianSalary={college.median_salary}
                     size={college.size}
+                    majors={college.programs}
                     matchScore={college.score}
-                    {...college}
+                    //{...college}
                     selected={selectedColleges.includes(college.id)}
                     onSelect={handleSelect}
                   />
@@ -258,27 +262,34 @@ export default function Search() {
             {/* Sidebar */}
             <div className="lg:col-span-1">
               <Card className="p-4 sticky top-20">
+
                 {/* Empty sidebar container */}
                 <h2 className="font-semibold mb-4">Selected Colleges</h2>
                 
+   
                 {/* Empty message when no colleges selected */}
-                {/* Shows all colleges currently selected */}
                 {selectedColleges.length === 0 ? (
                   <p className="text-sm text-muted-foreground text-center py-8">
                     No colleges selected yet. Click "Select" on any college to add it here.
                   </p>
                 ) : (
+
                   <div className="space-y-3">
                     {selectedColleges.map((id) => {
-                      const college = mockColleges.find((c) => c.id === id);
+                      //const college = mockColleges.find((c) => c.id === id);
+                      const college = colleges.find((c) => c.id === id);
+                      
+                      // If no colleges found then return nothing
                       if (!college) return null;
+
+                      {/* Shows all colleges currently selected */}
                       return (
                         <Card key={id} className="p-3">
                           <div className="flex items-start justify-between gap-2">
                             <div className="flex-1 min-w-0">
                               <p className="font-medium text-sm truncate">{college.name}</p>
                               <Badge variant="secondary" className="mt-1">
-                                {college.matchScore}%
+                                {college.score}%
                               </Badge>
                             </div>
                             <Button
