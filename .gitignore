@@ -43,4 +43,7 @@ coverage/
 .coverage.*
 *.lcov
 
-college_search_results.json
+college_search_results.json# Ignore local env and build artifacts
+backend/.env
+frontend/.env.local
+frontend/dist
