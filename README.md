@@ -8,6 +8,7 @@ This repository provides an integrated full-stack implementation combining a Dja
 - Auth: Supabase (email/password + Google OAuth)  
 - Backend: Django 5 + Django REST Framework + CORS headers  
 - Tooling: TypeScript, ESLint, ShadCN UI components
+- LLM: Llama 2.7 HF
 
 
 ## Development Environment
